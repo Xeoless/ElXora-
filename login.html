@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ElXora - Log In</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+  <div class="auth-container">
+    <div class="auth-form">
+      <h1>ElXora</h1>
+      <h2>Log In</h2>
+      <div class="input-group">
+        <input type="email" id="login-email" placeholder="Email" required autocomplete="email"/>
+        <div id="login-email-error" class="error-text"></div>
+      </div>
+      <div class="input-group">
+        <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password"/>
+        <div id="login-password-error" class="error-text"></div>
+      </div>
+      <button id="login-btn">Log In</button>
+      <div id="login-general-error" class="error-text center"></div>
+      <p>Don't have an account? <a href="signup.html">Sign up</a></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <!-- only auth-related Prism languages if needed -->
+  <script src="auth.js"></script>  <!-- ← new file, see below -->
+</body>
+</html>

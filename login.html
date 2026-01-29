@@ -9,7 +9,7 @@
 <body>
 
   <div class="auth-container">
-    <div class="auth-form">
+    <div id="login-form" class="auth-form">
       <h1>ElXora</h1>
       <h2>Log In</h2>
       <div class="input-group">
@@ -26,9 +26,28 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-  <!-- only auth-related Prism languages if needed -->
-  <script src="auth.js"></script>  <!-- ← new file, see below -->
+  <script>
+    // Simple login logic (you can move to auth.js later)
+    const USERS_KEY = 'elxora_users';
+    function getUsers() { return JSON.parse(localStorage.getItem(USERS_KEY) || '[]'); }
+
+    document.getElementById('login-btn').addEventListener('click', () => {
+      const email = document.getElementById('login-email').value.trim();
+      const pass  = document.getElementById('login-password').value;
+
+      document.querySelectorAll('.error-text').forEach(el => el.textContent = '');
+
+      const users = getUsers();
+      const user = users.find(u => u.email === email && u.pass === pass);
+
+      if (!user) {
+        document.getElementById('login-general-error').textContent = 'Wrong email or password';
+        return;
+      }
+
+      localStorage.setItem('elxora_current_user', JSON.stringify({ email: user.email, username: user.username }));
+      window.location.href = 'index.html';
+    });
+  </script>
 </body>
 </html>

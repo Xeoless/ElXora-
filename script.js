@@ -1,13 +1,8 @@
-// script.js ──────────────────────────────────────────────── ElXora Chat App
-
-const APP_NAME = "ElXora";
-const DB_NAME = "elxoraDB";
-const DB_VERSION = 1;
-const USER_KEY = "elxora_user";
-const API_KEY_STORAGE = "AIzaSyBDnsH0DDfrulYKruh1YOkY1cy-Liogt6o";
+// script.js ──────────────────────────────────────────────── ElXora Chat App (fixed API key handling)
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL   = "gemini-1.5-flash";  // change to gemini-1.5-pro if you want / have access
+const API_KEY_NAME   = "AIzaSyBDnsH0DDfrulYKruh1YOkY1cy-Liogt6o"; // consistent storage key
 
 const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
 You love using emojis 😄🚀 to make answers more engaging and fun when it feels natural.
@@ -22,95 +17,35 @@ Feel free to use emojis in your normal text responses to make them more lively a
 const WELCOME_MESSAGE = `Hey Kevin 👋  
 What can I help you with today? 🚀`;
 
-// ──────────────────────────────────────────────── DOM Elements
+// ─── DOM Elements ───────────────────────────────────────────
 const 
   authContainer      = document.getElementById('auth-container'),
+  appContainer       = document.getElementById('app-container'),
   loginForm          = document.getElementById('login-form'),
   signupForm         = document.getElementById('signup-form'),
   verifyForm         = document.getElementById('verification-form'),
-  appContainer       = document.getElementById('app-container'),
   chatMessages       = document.getElementById('chat-messages'),
   messageInput       = document.getElementById('message-input'),
   sendBtn            = document.getElementById('send-btn'),
   attachBtn          = document.getElementById('attach-btn'),
   fileInput          = document.getElementById('file-input'),
   typingIndicator    = document.getElementById('typing-indicator'),
-  chatListEl         = document.getElementById('chat-list'),
-  chatTitleEl        = document.getElementById('chat-title'),
-  newChatBtn         = document.getElementById('new-chat-btn'),
-  settingsBtn        = document.getElementById('settings-btn'),
+  chatTitle          = document.getElementById('chat-title'),
   settingsModal      = document.getElementById('settings-modal'),
   apiKeyInput        = document.getElementById('api-key'),
   saveApiKeyBtn      = document.getElementById('save-api-key'),
   closeSettingsBtn   = document.getElementById('close-settings'),
-  toastEl            = document.getElementById('toast'),
-  sidebar            = document.getElementById('sidebar'),
-  mobileToggle       = document.getElementById('mobile-sidebar-toggle'),
-  sidebarToggle      = document.getElementById('sidebar-toggle');
+  toastEl            = document.getElementById('toast');
 
-// ──────────────────────────────────────────────── State
-let db = null;
+// ─── State ──────────────────────────────────────────────────
 let currentUser = null;
-let currentChatId = null;
-let chats = [];
 
-// ──────────────────────────────────────────────── IndexedDB Setup
-function initDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      db = req.result;
-      resolve(db);
-    };
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('chats')) {
-        db.createObjectStore('chats', { keyPath: 'id', autoIncrement: true });
-      }
-    };
-  });
-}
-
-async function loadChats() {
-  if (!db) await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('chats', 'readonly');
-    const store = tx.objectStore('chats');
-    const req = store.getAll();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function saveChat(chat) {
-  if (!db) await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('chats', 'readwrite');
-    const store = tx.objectStore('chats');
-    const req = store.put(chat);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function deleteChat(id) {
-  if (!db) await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('chats', 'readwrite');
-    const store = tx.objectStore('chats');
-    const req = store.delete(id);
-    req.onsuccess = resolve;
-    req.onerror = () => reject(req.error);
-  });
-}
-
-// ──────────────────────────────────────────────── Utilities
+// ─── Utilities ──────────────────────────────────────────────
 function showToast(msg, type = 'info') {
   toastEl.textContent = msg;
   toastEl.className = `toast ${type}`;
   toastEl.classList.remove('hidden');
-  setTimeout(() => toastEl.classList.add('hidden'), 4000);
+  setTimeout(() => toastEl.classList.add('hidden'), 3800);
 }
 
 function scrollToBottom() {
@@ -119,161 +54,165 @@ function scrollToBottom() {
 
 function autoGrow(el) {
   el.style.height = 'auto';
-  el.style.height = el.scrollHeight + 'px';
-}
-
-function renderMarkdown(text) {
-  return marked.parse(text, { breaks: true, gfm: true });
+  el.style.height = (el.scrollHeight) + "px";
 }
 
 function renderMessage(sender, content) {
   const div = document.createElement('div');
-  div.className = `message ${sender}-message fade-in`;
+  div.className = `message ${sender}-message`;
+  div.innerHTML = `<div class="message-content">${marked.parse(content)}</div>`;
+  chatMessages.appendChild(div);
+  scrollToBottom();
 
-  let html = `<div class="message-content">${renderMarkdown(content)}</div>`;
-
+  // Code highlighting + copy button
   if (sender === 'ai') {
-    // Add copy buttons to code blocks
     setTimeout(() => {
-      document.querySelectorAll('pre code').forEach(block => {
-        if (!block.dataset.highlighted) {
+      document.querySelectorAll('pre code').forEach((block) => {
+        if (!block.dataset.processed) {
           Prism.highlightElement(block);
           const pre = block.parentElement;
-          const btn = document.createElement('button');
-          btn.className = 'copy-btn';
-          btn.textContent = 'Copy';
-          btn.onclick = () => {
+          const copyBtn = document.createElement('button');
+          copyBtn.className = 'copy-btn';
+          copyBtn.textContent = 'Copy';
+          copyBtn.onclick = () => {
             navigator.clipboard.writeText(block.textContent);
-            btn.textContent = 'Copied!';
-            setTimeout(() => btn.textContent = 'Copy', 2000);
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => copyBtn.textContent = 'Copy', 2000);
           };
-          pre.appendChild(btn);
-          block.dataset.highlighted = 'true';
+          pre.appendChild(copyBtn);
+          block.dataset.processed = 'true';
         }
       });
     }, 100);
   }
-
-  div.innerHTML = html;
-  chatMessages.appendChild(div);
-  scrollToBottom();
 }
 
-// ──────────────────────────────────────────────── Auth
-function getCurrentUser() {
-  return JSON.parse(localStorage.getItem(USER_KEY));
+// ─── Auth Logic ─────────────────────────────────────────────
+function getUser() {
+  return JSON.parse(localStorage.getItem('elxora_user'));
 }
 
-function setCurrentUser(user) {
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+function setUser(user) {
+  localStorage.setItem('elxora_user', JSON.stringify(user));
   currentUser = user;
 }
 
-function showLogin() {
-  loginForm.classList.remove('hidden');
-  signupForm.classList.add('hidden');
-  verifyForm.classList.add('hidden');
-}
+function showLogin()  { loginForm.classList.remove('hidden');  signupForm.classList.add('hidden'); verifyForm.classList.add('hidden'); }
+function showSignup() { signupForm.classList.remove('hidden'); loginForm.classList.add('hidden');  verifyForm.classList.add('hidden'); }
+function showVerify() { verifyForm.classList.remove('hidden'); loginForm.classList.add('hidden');  signupForm.classList.add('hidden'); }
 
-function showSignup() {
-  signupForm.classList.remove('hidden');
-  loginForm.classList.add('hidden');
-  verifyForm.classList.add('hidden');
-}
-
-function showVerify() {
-  verifyForm.classList.remove('hidden');
-  loginForm.classList.add('hidden');
-  signupForm.classList.add('hidden');
-}
-
-// Simulated signup → store temp user → verify
 document.getElementById('signup-btn').addEventListener('click', () => {
-  const email = document.getElementById('signup-email').value.trim();
+  const email    = document.getElementById('signup-email').value.trim();
   const username = document.getElementById('signup-username').value.trim();
-  const pass = document.getElementById('signup-password').value;
-  const confirm = document.getElementById('signup-confirm-password').value;
+  const pass     = document.getElementById('signup-password').value;
+  const confirm  = document.getElementById('signup-confirm-password').value;
 
-  if (!email || !username || !pass) return showToast("Fill all fields", "error");
-  if (pass !== confirm) return showToast("Passwords don't match", "error");
-  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return showToast("Invalid username", "error");
+  let error = false;
+  document.querySelectorAll('.error-text').forEach(el => el.textContent = '');
+  document.querySelectorAll('input').forEach(inp => inp.classList.remove('error'));
 
-  // Simulate sending code
+  if (!email.includes('@'))               { document.getElementById('signup-email-error').textContent = 'Invalid email'; error = true; }
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) { document.getElementById('signup-username-error').textContent = '3-20 chars: a-z0-9_'; error = true; }
+  if (pass.length < 6)                    { document.getElementById('signup-password-error').textContent = '≥ 6 characters'; error = true; }
+  if (pass !== confirm)                   { document.getElementById('signup-confirm-error').textContent = 'Passwords do not match'; error = true; }
+
+  const existing = getUser();
+  if (existing && existing.email === email) {
+    document.getElementById('signup-general-error').textContent = 'Email already registered';
+    error = true;
+  }
+
+  if (error) return;
+
   localStorage.setItem('temp_signup', JSON.stringify({email, username, pass}));
   showVerify();
-  showToast("Use code: 123456", "info");
+  showToast('Use verification code: 123456', 'info');
 });
 
 document.getElementById('verify-btn').addEventListener('click', () => {
-  const inputs = [...verifyForm.querySelectorAll('input')];
-  const code = inputs.map(i => i.value).join('');
-
-  if (code !== '123456') return showToast("Wrong code", "error");
+  const code = [...verifyForm.querySelectorAll('input')].map(i => i.value.trim()).join('');
+  if (code !== '123456') {
+    document.getElementById('verify-error').textContent = 'Incorrect code';
+    return;
+  }
 
   const temp = JSON.parse(localStorage.getItem('temp_signup') || '{}');
-  if (!temp.email) return showToast("Session expired", "error");
+  if (!temp.email) {
+    showToast('Session expired — please sign up again', 'error');
+    showSignup();
+    return;
+  }
 
-  const user = { email: temp.email, username: temp.username };
-  setCurrentUser(user);
+  setUser({ email: temp.email, username: temp.username, pass: temp.pass });
   localStorage.removeItem('temp_signup');
-
-  showToast("Welcome to ElXora! 🎉", "success");
+  showToast('Account created successfully! 🎉', 'success');
   enterApp();
 });
 
 document.getElementById('login-btn').addEventListener('click', () => {
   const email = document.getElementById('login-email').value.trim();
-  const pass = document.getElementById('login-password').value;
+  const pass  = document.getElementById('login-password').value;
+  const user  = getUser();
 
-  const user = getCurrentUser();
-  if (user && user.email === email) {
-    setCurrentUser(user);
-    enterApp();
-  } else {
-    showToast("Invalid credentials (prototype: use signup first)", "error");
+  document.querySelectorAll('.error-text').forEach(el => el.textContent = '');
+
+  if (!user) {
+    document.getElementById('login-general-error').textContent = 'No account found — please sign up first';
+    return;
   }
+  if (user.email !== email) {
+    document.getElementById('login-email-error').textContent = 'Account not found';
+    return;
+  }
+  if (user.pass !== pass) {
+    document.getElementById('login-password-error').textContent = 'Invalid password';
+    return;
+  }
+
+  showToast(`Welcome back, ${user.username}! 🚀`, 'success');
+  enterApp();
 });
 
 document.getElementById('signup-link').addEventListener('click', e => { e.preventDefault(); showSignup(); });
 document.getElementById('login-link').addEventListener('click', e => { e.preventDefault(); showLogin(); });
 
-// ──────────────────────────────────────────────── Gemini API
-async function callGemini(prompt, history = []) {
-  const key = localStorage.getItem(API_KEY_STORAGE);
-  if (!key) {
-    showToast("No API key. Set it in Settings ⚙", "error");
+// ─── Gemini API Call ────────────────────────────────────────
+async function callGemini(userMessage) {
+  const apiKey = localStorage.getItem(API_KEY_NAME);
+  if (!apiKey) {
+    showToast('Please set your Gemini API key in Settings (gear icon) ⚙', 'error');
     return null;
   }
 
-  const contents = history.map(m => ({ role: m.role, parts: [{text: m.content}] }));
-  contents.push({ role: "user", parts: [{text: prompt}] });
-
   try {
-    const res = await fetch(
-      `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${key}`,
+    const response = await fetch(
+      `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents,
-          systemInstruction: { parts: [{text: SYSTEM_PROMPT}] },
-          generationConfig: { temperature: 0.75, maxOutputTokens: 2048 }
+          contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
         })
       }
     );
 
-    if (!res.ok) throw new Error(await res.text());
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || `HTTP ${response.status}`);
+    }
 
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "No response";
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response received';
   } catch (err) {
     console.error(err);
-    showToast("Gemini error: " + err.message.slice(0, 80), "error");
+    showToast('Gemini API error: ' + err.message, 'error');
     return null;
   }
 }
 
-// ──────────────────────────────────────────────── Chat Logic
+// ─── Send Message ───────────────────────────────────────────
 async function sendMessage() {
   const text = messageInput.value.trim();
   if (!text) return;
@@ -282,31 +221,17 @@ async function sendMessage() {
   messageInput.value = '';
   autoGrow(messageInput);
   sendBtn.disabled = true;
-
   typingIndicator.classList.remove('hidden');
   scrollToBottom();
 
-  const reply = await callGemini(text, []); // todo: pass real history later
+  const reply = await callGemini(text);
 
   typingIndicator.classList.add('hidden');
-
   if (reply) {
     renderMessage('ai', reply);
-    scrollToBottom();
   }
 }
 
-function startNewChat() {
-  currentChatId = null;
-  chatMessages.innerHTML = '';
-  renderMessage('ai', WELCOME_MESSAGE);
-  chatTitleEl.textContent = "New Chat";
-  messageInput.focus();
-}
-
-newChatBtn.addEventListener('click', startNewChat);
-
-// ──────────────────────────────────────────────── Input handlers
 messageInput.addEventListener('input', () => {
   autoGrow(messageInput);
   sendBtn.disabled = !messageInput.value.trim();
@@ -321,70 +246,56 @@ messageInput.addEventListener('keydown', e => {
 
 sendBtn.addEventListener('click', sendMessage);
 
-attachBtn.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => {
-  const f = e.target.files[0];
-  if (f) showToast(`Attached: ${f.name} (not sent yet)`, "info");
-});
-
-// ──────────────────────────────────────────────── Settings
-settingsBtn.addEventListener('click', () => {
-  apiKeyInput.value = localStorage.getItem(API_KEY_STORAGE) || '';
+// ─── Settings Modal ─────────────────────────────────────────
+document.getElementById('settings-btn').addEventListener('click', () => {
+  apiKeyInput.value = localStorage.getItem(API_KEY_NAME) || '';
   settingsModal.classList.remove('hidden');
 });
 
 saveApiKeyBtn.addEventListener('click', () => {
-  const k = apiKeyInput.value.trim();
-  if (k) {
-    localStorage.setItem(API_KEY_STORAGE, k);
-    showToast("API key saved ✓", "success");
+  const key = apiKeyInput.value.trim();
+  if (key.startsWith('AIzaSy') && key.length > 30) {
+    localStorage.setItem(API_KEY_NAME, key);
+    showToast('Gemini API key saved successfully!', 'success');
     settingsModal.classList.add('hidden');
   } else {
-    showToast("Enter a key", "error");
+    showToast('Please enter a valid Gemini API key', 'error');
   }
 });
 
 closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
 
-// Mobile sidebar
-mobileToggle.addEventListener('click', () => sidebar.classList.add('open'));
-sidebarToggle.addEventListener('click', () => sidebar.classList.remove('open'));
-
-// ──────────────────────────────────────────────── Init
-async function enterApp() {
+// ─── Enter App ──────────────────────────────────────────────
+function enterApp() {
   authContainer.classList.add('hidden');
   appContainer.classList.remove('hidden');
 
-  document.getElementById('username-display').textContent = currentUser.username;
-  document.getElementById('email-display').textContent = currentUser.email;
-  document.getElementById('avatar').textContent = currentUser.username[0].toUpperCase();
+  const user = getUser();
+  document.getElementById('username-display').textContent = user.username;
+  document.getElementById('email-display').textContent   = user.email;
+  document.getElementById('avatar').textContent          = user.username.charAt(0).toUpperCase();
 
-  startNewChat();
+  chatMessages.innerHTML = '';
+  renderMessage('ai', WELCOME_MESSAGE);
+  messageInput.focus();
 }
 
-async function init() {
-  currentUser = getCurrentUser();
+// ─── Init ───────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  currentUser = getUser();
   if (currentUser) {
     enterApp();
   } else {
     showLogin();
   }
 
-  // Auto-focus verification inputs
-  const verifyInputs = verifyForm.querySelectorAll('input');
-  verifyInputs.forEach((input, i) => {
+  // Verification code auto-focus next field
+  const verifyInputs = document.querySelectorAll('.verification-inputs input');
+  verifyInputs.forEach((input, index) => {
     input.addEventListener('input', () => {
-      if (input.value && i < 5) verifyInputs[i+1].focus();
-    });
-    input.addEventListener('paste', e => {
-      e.preventDefault();
-      const paste = (e.clipboardData || window.clipboardData).getData('text');
-      if (/^\d{6}$/.test(paste)) {
-        paste.split('').forEach((d, j) => { if (verifyInputs[j]) verifyInputs[j].value = d; });
-        document.getElementById('verify-btn').focus();
+      if (input.value.length === 1 && index < 5) {
+        verifyInputs[index + 1].focus();
       }
     });
   });
-}
-
-window.addEventListener('load', init);
+});

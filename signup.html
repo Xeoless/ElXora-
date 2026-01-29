@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ElXora - Sign Up</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+  <div class="auth-container">
+    <div id="signup-form" class="auth-form">
+      <h1>ElXora</h1>
+      <h2>Create Account</h2>
+      <div class="input-group">
+        <input type="email" id="signup-email" placeholder="Email" required/>
+        <div id="signup-email-error" class="error-text"></div>
+      </div>
+      <div class="input-group">
+        <input type="text" id="signup-username" placeholder="Username (3-20 chars)" required/>
+        <div id="signup-username-error" class="error-text"></div>
+      </div>
+      <div class="input-group">
+        <input type="password" id="signup-password" placeholder="Password" required/>
+        <div id="signup-password-error" class="error-text"></div>
+      </div>
+      <div class="input-group">
+        <input type="password" id="signup-confirm-password" placeholder="Confirm Password" required/>
+        <div id="signup-confirm-error" class="error-text"></div>
+      </div>
+      <button id="signup-btn">Sign Up</button>
+      <div id="signup-general-error" class="error-text center"></div>
+      <p>Already have an account? <a href="login.html">Log in</a></p>
+    </div>
+
+    <!-- Verification form (shown after clicking Sign Up) -->
+    <div id="verification-form" class="auth-form hidden">
+      <h1>ElXora</h1>
+      <h2>Verify Email</h2>
+      <p>Enter 6-digit code (prototype: 123456)</p>
+      <div class="verification-inputs">
+        <input type="text" maxlength="1" pattern="\d" required autofocus/>
+        <input type="text" maxlength="1" pattern="\d" required/>
+        <input type="text" maxlength="1" pattern="\d" required/>
+        <input type="text" maxlength="1" pattern="\d" required/>
+        <input type="text" maxlength="1" pattern="\d" required/>
+        <input type="text" maxlength="1" pattern="\d" required/>
+      </div>
+      <button id="verify-btn">Verify</button>
+      <div id="verify-error" class="error-text center"></div>
+      <p><a href="#" id="back-to-signup">Back to sign up</a></p>
+    </div>
+  </div>
+
+  <script>
+    const USERS_KEY = 'elxora_users';
+
+    function getUsers() {
+      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+    }
+
+    function saveUsers(users) {
+      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    }
+
+    // Show/hide forms
+    function showSignup() {
+      document.getElementById('signup-form').classList.remove('hidden');
+      document.getElementById('verification-form').classList.add('hidden');
+    }
+
+    function showVerify() {
+      document.getElementById('signup-form').classList.add('hidden');
+      document.getElementById('verification-form').classList.remove('hidden');
+      document.querySelector('.verification-inputs input').focus();
+    }
+
+    // Auto-focus next input for verification code
+    const verifyInputs = document.querySelectorAll('.verification-inputs input');
+    verifyInputs.forEach((input, index) => {
+      input.addEventListener('input', () => {
+        if (input.value.length === 1 && index < 5) {
+          verifyInputs[index + 1].focus();
+        }
+      });
+    });
+
+    // Sign Up button
+    document.getElementById('signup-btn').addEventListener('click', () => {
+      const email    = document.getElementById('signup-email').value.trim();
+      const username = document.getElementById('signup-username').value.trim();
+      const pass     = document.getElementById('signup-password').value;
+      const confirm  = document.getElementById('signup-confirm-password').value;
+
+      let hasError = false;
+      document.querySelectorAll('.error-text').forEach(el => el.textContent = '');
+
+      if (!email.includes('@') || !email.includes('.')) {
+        document.getElementById('signup-email-error').textContent = 'Valid email required';
+        hasError = true;
+      }
+      if (username.length < 3 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+        document.getElementById('signup-username-error').textContent = '3-20 chars: letters, numbers, _';
+        hasError = true;
+      }
+      if (pass.length < 6) {
+        document.getElementById('signup-password-error').textContent = '≥ 6 characters';
+        hasError = true;
+      }
+      if (pass !== confirm) {
+        document.getElementById('signup-confirm-error').textContent = 'Passwords do not match';
+        hasError = true;
+      }
+
+      const users = getUsers();
+      if (users.some(u => u.email === email)) {
+        document.getElementById('signup-general-error').textContent = 'Email already registered';
+        hasError = true;
+      }
+      if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+        document.getElementById('signup-general-error').textContent = 'Username taken';
+        hasError = true;
+      }
+
+      if (hasError) return;
+
+      // Store temp data and go to verification
+      localStorage.setItem('temp_signup', JSON.stringify({ email, username, pass }));
+      showVerify();
+    });
+
+    // Verify button (fake code 123456)
+    document.getElementById('verify-btn').addEventListener('click', () => {
+      const code = Array.from(verifyInputs).map(i => i.value.trim()).join('');
+      if (code !== '123456') {
+        document.getElementById('verify-error').textContent = 'Wrong code — use 123456 for now';
+        return;
+      }
+
+      const temp = JSON.parse(localStorage.getItem('temp_signup') || '{}');
+      if (!temp.email) {
+        alert('Session expired — please sign up again');
+        showSignup();
+        return;
+      }
+
+      const users = getUsers();
+      users.push({
+        email: temp.email,
+        username: temp.username,
+        pass: temp.pass  // plaintext – only for prototype!
+      });
+      saveUsers(users);
+
+      localStorage.setItem('elxora_current_user', JSON.stringify({
+        email: temp.email,
+        username: temp.username
+      }));
+
+      localStorage.removeItem('temp_signup');
+
+      window.location.href = 'index.html';
+    });
+
+    // Back link
+    document.getElementById('back-to-signup')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      showSignup();
+    });
+
+    // Start on signup form
+    showSignup();
+  </script>
+</body>
+</html>

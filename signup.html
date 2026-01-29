@@ -64,7 +64,6 @@
       localStorage.setItem(USERS_KEY, JSON.stringify(users));
     }
 
-    // Show/hide forms
     function showSignup() {
       document.getElementById('signup-form').classList.remove('hidden');
       document.getElementById('verification-form').classList.add('hidden');
@@ -73,10 +72,11 @@
     function showVerify() {
       document.getElementById('signup-form').classList.add('hidden');
       document.getElementById('verification-form').classList.remove('hidden');
-      document.querySelector('.verification-inputs input').focus();
+      const firstInput = document.querySelector('.verification-inputs input');
+      if (firstInput) firstInput.focus();
     }
 
-    // Auto-focus next input
+    // Auto-focus next input for verification
     const verifyInputs = document.querySelectorAll('.verification-inputs input');
     verifyInputs.forEach((input, index) => {
       input.addEventListener('input', () => {
@@ -86,77 +86,93 @@
       });
     });
 
-    // SIGN UP button – generate OTP and send real email
-    document.getElementById('signup-btn').addEventListener('click', async () => {
-      const email    = document.getElementById('signup-email').value.trim();
-      const username = document.getElementById('signup-username').value.trim();
-      const pass     = document.getElementById('signup-password').value;
-      const confirm  = document.getElementById('signup-confirm-password').value;
+    // Debug: confirm script is running
+    console.log("signup.html script loaded");
 
-      let hasError = false;
-      document.querySelectorAll('.error-text').forEach(el => el.textContent = '');
+    // SIGN UP button – real OTP send
+    const signupBtn = document.getElementById('signup-btn');
+    if (signupBtn) {
+      console.log("Signup button found");
+      signupBtn.addEventListener('click', async () => {
+        console.log("Sign Up button clicked");
 
-      if (!email.includes('@') || !email.includes('.')) {
-        document.getElementById('signup-email-error').textContent = 'Valid email required';
-        hasError = true;
-      }
-      if (username.length < 3 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
-        document.getElementById('signup-username-error').textContent = '3-20 chars: letters, numbers, _';
-        hasError = true;
-      }
-      if (pass.length < 6) {
-        document.getElementById('signup-password-error').textContent = '≥ 6 characters';
-        hasError = true;
-      }
-      if (pass !== confirm) {
-        document.getElementById('signup-confirm-error').textContent = 'Passwords do not match';
-        hasError = true;
-      }
+        const email    = document.getElementById('signup-email').value.trim();
+        const username = document.getElementById('signup-username').value.trim();
+        const pass     = document.getElementById('signup-password').value;
+        const confirm  = document.getElementById('signup-confirm-password').value;
 
-      const users = getUsers();
-      if (users.some(u => u.email === email)) {
-        document.getElementById('signup-general-error').textContent = 'Email already registered';
-        hasError = true;
-      }
-      if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-        document.getElementById('signup-general-error').textContent = 'Username taken';
-        hasError = true;
-      }
+        let hasError = false;
+        document.querySelectorAll('.error-text').forEach(el => el.textContent = '');
 
-      if (hasError) return;
+        if (!email.includes('@') || !email.includes('.')) {
+          document.getElementById('signup-email-error').textContent = 'Valid email required';
+          hasError = true;
+        }
+        if (username.length < 3 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+          document.getElementById('signup-username-error').textContent = '3-20 chars: letters, numbers, _';
+          hasError = true;
+        }
+        if (pass.length < 6) {
+          document.getElementById('signup-password-error').textContent = '≥ 6 characters';
+          hasError = true;
+        }
+        if (pass !== confirm) {
+          document.getElementById('signup-confirm-error').textContent = 'Passwords do not match';
+          hasError = true;
+        }
 
-      // Generate real 6-digit code
-      const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const users = getUsers();
+        if (users.some(u => u.email === email)) {
+          document.getElementById('signup-general-error').textContent = 'Email already registered';
+          hasError = true;
+        }
+        if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+          document.getElementById('signup-general-error').textContent = 'Username taken';
+          hasError = true;
+        }
 
-      try {
-        await fetch(SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',  // Important for Google Apps Script
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: email,
-            username: username,
-            code: generatedCode
-          })
-        });
+        if (hasError) {
+          console.log("Validation failed");
+          return;
+        }
 
-        // Store temp data for verification
-        localStorage.setItem('temp_signup', JSON.stringify({
-          email,
-          username,
-          pass,
-          code: generatedCode,
-          timestamp: Date.now()
-        }));
+        console.log("Validation passed – sending OTP");
 
-        showVerify();
-        alert(`A 6-digit code has been sent to ${email}\nCheck your inbox/spam folder (may take up to 60 seconds)`);
+        const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+        console.log("Generated code:", generatedCode);
 
-      } catch (err) {
-        console.error('Failed to send OTP:', err);
-        alert('Error sending code. Check console (F12) and try again.');
-      }
-    });
+        try {
+          console.log("Sending fetch request...");
+          await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: email,
+              username: username,
+              code: generatedCode
+            })
+          });
+          console.log("Fetch request sent (no-cors mode)");
+
+          localStorage.setItem('temp_signup', JSON.stringify({
+            email,
+            username,
+            pass,
+            code: generatedCode,
+            timestamp: Date.now()
+          }));
+
+          showVerify();
+          alert(`Code sent to ${email}! Check inbox/spam/promotions (may take 10-60 sec)`);
+        } catch (err) {
+          console.error("Send failed:", err);
+          alert('Failed to send code – check console (F12) for details');
+        }
+      });
+    } else {
+      console.error("Signup button not found – check HTML");
+    }
 
     // VERIFY button
     document.getElementById('verify-btn').addEventListener('click', () => {
@@ -169,9 +185,8 @@
         return;
       }
 
-      // Check expiry (10 minutes)
-      if (Date.now() - temp.timestamp > 10 * 60 * 1000) {
-        alert('Code expired. Please sign up again.');
+      if (Date.now() - temp.timestamp > 600000) { // 10 minutes
+        alert('Code expired – please sign up again');
         localStorage.removeItem('temp_signup');
         showSignup();
         return;
@@ -182,12 +197,11 @@
         return;
       }
 
-      // Success – create account
       const users = getUsers();
       users.push({
         email: temp.email,
         username: temp.username,
-        pass: temp.pass  // plaintext for now – only prototype!
+        pass: temp.pass
       });
       saveUsers(users);
 
@@ -198,7 +212,7 @@
 
       localStorage.removeItem('temp_signup');
 
-      alert('Email verified! Welcome to ElXora 🎉');
+      alert('Email verified! Welcome 🎉');
       window.location.href = 'index.html';
     });
 
@@ -208,7 +222,6 @@
       showSignup();
     });
 
-    // Start on signup form
     showSignup();
   </script>
 </body>

@@ -9,9 +9,8 @@
 </head>
 <body>
 
-  <!-- ─── PROTECTION: Redirect to login if not authenticated ─── -->
+  <!-- Protection: redirect to login if not logged in -->
   <script>
-    // This runs immediately — if no current user, go to login page
     (function() {
       const currentUser = localStorage.getItem('elxora_current_user');
       if (!currentUser) {
@@ -20,7 +19,6 @@
     })();
   </script>
 
-  <!-- Main App (everything below this line stays exactly as you had it) -->
   <div id="app-container" class="app-container">
     <aside id="sidebar" class="sidebar">
       <button id="new-chat-btn">+ New Chat</button>
@@ -32,7 +30,6 @@
           <small id="email-display"></small>
         </div>
       </div>
-      <!-- Add logout button here -->
       <button id="logout-btn" style="margin:16px; padding:12px; background:#e11d48; color:white; border:none; border-radius:8px; cursor:pointer;">
         Log Out
       </button>
@@ -44,9 +41,9 @@
         <button id="mobile-sidebar-toggle" class="mobile-sidebar-toggle">☰</button>
         <div class="chat-header-title">
           <h2 id="chat-title">New Chat</h2>
-          <small class="subtitle">Powered by Gemini • ElXora</small>
+          <small class="subtitle">The best Ai • ElXora</small>
         </div>
-        <button id="settings-btn" class="settings-btn">⚙</button>
+        <!-- Settings button removed -->
       </header>
 
       <div id="chat-messages" class="chat-messages"></div>
@@ -70,18 +67,7 @@
     </main>
   </div>
 
-  <!-- Settings Modal -->
-  <div id="settings-modal" class="modal hidden">
-    <div class="modal-content">
-      <h2>Settings</h2>
-      <label>Gemini API Key</label>
-      <input type="text" id="api-key" placeholder="AIzaSy..."/>
-      <button id="save-api-key">Save</button>
-      <button id="close-settings">Close</button>
-    </div>
-  </div>
-
-  <!-- Toast -->
+  <!-- Toast (still here for messages) -->
   <div id="toast" class="toast hidden"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -91,13 +77,166 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
-  <script src="script.js"></script>
 
-  <!-- Logout handler (add this small block or put it in script.js) -->
+  <!-- Updated script.js content with hardcoded key (paste this into your script.js file) -->
   <script>
-    document.getElementById('logout-btn').addEventListener('click', () => {
+    const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+    const GEMINI_MODEL   = "gemini-1.5-flash";
+    const API_KEY        = "AIzaSyBDnsH0DDfrulYKruh1YOkY1cy-Liogt6o";  // Hardcoded your key
+
+    const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
+You love using emojis 😄🚀 to make answers more engaging and fun when it feels natural.
+Always write clean, modern, well-commented code.
+When showing code:
+- Wrap in triple backticks with correct language tag (```python, ```luau, ```js, ```html, ```css, ```ts etc.)
+- Never send broken or incomplete code unless debugging
+- After longer code (>10 lines) add a short explanation
+- Use best practices, modern syntax, avoid deprecated features
+Feel free to use emojis in your normal text responses to make them more lively and human 😊👍`;
+
+    const WELCOME_MESSAGE = `Hey Kevin 👋  
+What can I help you with today? 🚀`;
+
+    // ─── DOM Elements ───────────────────────────────────────────
+    const 
+      appContainer      = document.getElementById('app-container'),
+      chatMessages      = document.getElementById('chat-messages'),
+      messageInput      = document.getElementById('message-input'),
+      sendBtn           = document.getElementById('send-btn'),
+      attachBtn         = document.getElementById('attach-btn'),
+      fileInput         = document.getElementById('file-input'),
+      typingIndicator   = document.getElementById('typing-indicator'),
+      chatTitle         = document.getElementById('chat-title'),
+      toastEl           = document.getElementById('toast');
+
+    // ─── Utilities ──────────────────────────────────────────────
+    function showToast(msg, type = 'info') {
+      toastEl.textContent = msg;
+      toastEl.className = `toast ${type}`;
+      toastEl.classList.remove('hidden');
+      setTimeout(() => toastEl.classList.add('hidden'), 3800);
+    }
+
+    function scrollToBottom() {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function autoGrow(el) {
+      el.style.height = 'auto';
+      el.style.height = (el.scrollHeight) + "px";
+    }
+
+    function renderMessage(sender, content) {
+      const div = document.createElement('div');
+      div.className = `message ${sender}-message`;
+      div.innerHTML = `<div class="message-content">${marked.parse(content)}</div>`;
+      chatMessages.appendChild(div);
+      scrollToBottom();
+
+      if (sender === 'ai') {
+        setTimeout(() => {
+          document.querySelectorAll('pre code').forEach((block) => {
+            if (!block.dataset.processed) {
+              Prism.highlightElement(block);
+              const pre = block.parentElement;
+              const copyBtn = document.createElement('button');
+              copyBtn.className = 'copy-btn';
+              copyBtn.textContent = 'Copy';
+              copyBtn.onclick = () => {
+                navigator.clipboard.writeText(block.textContent);
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => copyBtn.textContent = 'Copy', 2000);
+              };
+              pre.appendChild(copyBtn);
+              block.dataset.processed = 'true';
+            }
+          });
+        }, 100);
+      }
+    }
+
+    // ─── Gemini API Call ────────────────────────────────────────
+    async function callGemini(userMessage) {
+      try {
+        const response = await fetch(
+          `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+              systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+              generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
+            })
+          }
+        );
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error?.message || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response received';
+      } catch (err) {
+        console.error(err);
+        showToast('Gemini API error: ' + err.message, 'error');
+        return null;
+      }
+    }
+
+    // ─── Send Message ───────────────────────────────────────────
+    async function sendMessage() {
+      const text = messageInput.value.trim();
+      if (!text) return;
+
+      renderMessage('user', text);
+      messageInput.value = '';
+      autoGrow(messageInput);
+      sendBtn.disabled = true;
+      typingIndicator.classList.remove('hidden');
+      scrollToBottom();
+
+      const reply = await callGemini(text);
+
+      typingIndicator.classList.add('hidden');
+      if (reply) {
+        renderMessage('ai', reply);
+      } else {
+        renderMessage('ai', "Sorry, something went wrong 😕");
+      }
+    }
+
+    messageInput.addEventListener('input', () => {
+      autoGrow(messageInput);
+      sendBtn.disabled = !messageInput.value.trim();
+    });
+
+    messageInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    sendBtn.addEventListener('click', sendMessage);
+
+    // ─── Logout ─────────────────────────────────────────────────
+    document.getElementById('logout-btn')?.addEventListener('click', () => {
       localStorage.removeItem('elxora_current_user');
       window.location.href = 'login.html';
+    });
+
+    // ─── Init ───────────────────────────────────────────────────
+    window.addEventListener('load', () => {
+      const user = JSON.parse(localStorage.getItem('elxora_current_user') || '{}');
+      document.getElementById('username-display').textContent = user.username || 'User';
+      document.getElementById('email-display').textContent   = user.email || '';
+      document.getElementById('avatar').textContent          = (user.username || 'U').charAt(0).toUpperCase();
+
+      chatMessages.innerHTML = '';
+      renderMessage('ai', WELCOME_MESSAGE);
+      messageInput.focus();
     });
   </script>
 </body>

@@ -9,11 +9,10 @@
 </head>
 <body>
 
-  <!-- Protection: redirect to login if not logged in -->
+  <!-- Redirect if not logged in -->
   <script>
     (function() {
-      const currentUser = localStorage.getItem('elxora_current_user');
-      if (!currentUser) {
+      if (!localStorage.getItem('elxora_current_user')) {
         window.location.replace('login.html');
       }
     })();
@@ -30,9 +29,7 @@
           <small id="email-display"></small>
         </div>
       </div>
-      <button id="logout-btn" style="margin:16px; padding:12px; background:#e11d48; color:white; border:none; border-radius:8px; cursor:pointer;">
-        Log Out
-      </button>
+      <button id="logout-btn" class="logout-btn">Log Out</button>
       <button id="sidebar-toggle" class="sidebar-toggle">←</button>
     </aside>
 
@@ -41,16 +38,17 @@
         <button id="mobile-sidebar-toggle" class="mobile-sidebar-toggle">☰</button>
         <div class="chat-header-title">
           <h2 id="chat-title">New Chat</h2>
-          <small class="subtitle">The best Ai • ElXora</small>
+          <small class="subtitle">The Best Ai • ElXora</small>
         </div>
-        <!-- Settings button removed -->
       </header>
 
       <div id="chat-messages" class="chat-messages"></div>
+
       <div id="typing-indicator" class="typing-indicator hidden">
         <div class="dot"></div><div class="dot"></div><div class="dot"></div>
       </div>
 
+      <!-- Typing bar / input area - this should be visible at the bottom -->
       <div class="input-area">
         <div class="input-wrapper">
           <button id="attach-btn" class="attach-btn" title="Attach file">📎</button>
@@ -67,7 +65,7 @@
     </main>
   </div>
 
-  <!-- Toast (still here for messages) -->
+  <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -78,36 +76,35 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
 
-  <!-- Updated script.js content with hardcoded key (paste this into your script.js file) -->
   <script>
+    // ────────────────────────────────────────────────
+    // CONFIG - Your API key hardcoded
+    // ────────────────────────────────────────────────
     const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
     const GEMINI_MODEL   = "gemini-1.5-flash";
-    const API_KEY        = "AIzaSyBDnsH0DDfrulYKruh1YOkY1cy-Liogt6o";  // Hardcoded your key
+    const API_KEY        = "AIzaSyBDnsH0DDfrulYKruh1YOkY1cy-Liogt6o";
 
     const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
 You love using emojis 😄🚀 to make answers more engaging and fun when it feels natural.
 Always write clean, modern, well-commented code.
 When showing code:
-- Wrap in triple backticks with correct language tag (```python, ```luau, ```js, ```html, ```css, ```ts etc.)
+- Wrap in triple backticks with correct language tag
 - Never send broken or incomplete code unless debugging
 - After longer code (>10 lines) add a short explanation
-- Use best practices, modern syntax, avoid deprecated features
-Feel free to use emojis in your normal text responses to make them more lively and human 😊👍`;
+- Use best practices, modern syntax`;
 
     const WELCOME_MESSAGE = `Hey Kevin 👋  
 What can I help you with today? 🚀`;
 
     // ─── DOM Elements ───────────────────────────────────────────
-    const 
-      appContainer      = document.getElementById('app-container'),
-      chatMessages      = document.getElementById('chat-messages'),
-      messageInput      = document.getElementById('message-input'),
-      sendBtn           = document.getElementById('send-btn'),
-      attachBtn         = document.getElementById('attach-btn'),
-      fileInput         = document.getElementById('file-input'),
-      typingIndicator   = document.getElementById('typing-indicator'),
-      chatTitle         = document.getElementById('chat-title'),
-      toastEl           = document.getElementById('toast');
+    const chatMessages       = document.getElementById('chat-messages');
+    const messageInput       = document.getElementById('message-input');
+    const sendBtn            = document.getElementById('send-btn');
+    const typingIndicator    = document.getElementById('typing-indicator');
+    const toastEl            = document.getElementById('toast');
+
+    // Simple chat persistence (per session for now)
+    let currentChat = [];
 
     // ─── Utilities ──────────────────────────────────────────────
     function showToast(msg, type = 'info') {
@@ -123,7 +120,7 @@ What can I help you with today? 🚀`;
 
     function autoGrow(el) {
       el.style.height = 'auto';
-      el.style.height = (el.scrollHeight) + "px";
+      el.style.height = el.scrollHeight + "px";
     }
 
     function renderMessage(sender, content) {
@@ -135,19 +132,9 @@ What can I help you with today? 🚀`;
 
       if (sender === 'ai') {
         setTimeout(() => {
-          document.querySelectorAll('pre code').forEach((block) => {
+          document.querySelectorAll('pre code').forEach(block => {
             if (!block.dataset.processed) {
               Prism.highlightElement(block);
-              const pre = block.parentElement;
-              const copyBtn = document.createElement('button');
-              copyBtn.className = 'copy-btn';
-              copyBtn.textContent = 'Copy';
-              copyBtn.onclick = () => {
-                navigator.clipboard.writeText(block.textContent);
-                copyBtn.textContent = 'Copied!';
-                setTimeout(() => copyBtn.textContent = 'Copy', 2000);
-              };
-              pre.appendChild(copyBtn);
               block.dataset.processed = 'true';
             }
           });
@@ -155,7 +142,7 @@ What can I help you with today? 🚀`;
       }
     }
 
-    // ─── Gemini API Call ────────────────────────────────────────
+    // ─── Gemini Call ────────────────────────────────────────────
     async function callGemini(userMessage) {
       try {
         const response = await fetch(
@@ -171,16 +158,13 @@ What can I help you with today? 🚀`;
           }
         );
 
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error?.message || `HTTP ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response received';
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response';
       } catch (err) {
         console.error(err);
-        showToast('Gemini API error: ' + err.message, 'error');
+        showToast('API error: ' + err.message, 'error');
         return null;
       }
     }
@@ -191,6 +175,8 @@ What can I help you with today? 🚀`;
       if (!text) return;
 
       renderMessage('user', text);
+      currentChat.push({ role: 'user', content: text });
+
       messageInput.value = '';
       autoGrow(messageInput);
       sendBtn.disabled = true;
@@ -202,6 +188,7 @@ What can I help you with today? 🚀`;
       typingIndicator.classList.add('hidden');
       if (reply) {
         renderMessage('ai', reply);
+        currentChat.push({ role: 'ai', content: reply });
       } else {
         renderMessage('ai', "Sorry, something went wrong 😕");
       }
@@ -220,6 +207,14 @@ What can I help you with today? 🚀`;
     });
 
     sendBtn.addEventListener('click', sendMessage);
+
+    // ─── New Chat ───────────────────────────────────────────────
+    document.getElementById('new-chat-btn')?.addEventListener('click', () => {
+      currentChat = [];
+      chatMessages.innerHTML = '';
+      renderMessage('ai', WELCOME_MESSAGE);
+      document.getElementById('chat-title').textContent = 'New Chat';
+    });
 
     // ─── Logout ─────────────────────────────────────────────────
     document.getElementById('logout-btn')?.addEventListener('click', () => {

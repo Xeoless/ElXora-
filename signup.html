@@ -33,11 +33,11 @@
       <p>Already have an account? <a href="login.html">Log in</a></p>
     </div>
 
-    <!-- Verification form (shown after clicking Sign Up) -->
+    <!-- Verification form -->
     <div id="verification-form" class="auth-form hidden">
       <h1>ElXora</h1>
       <h2>Verify Email</h2>
-      <p>Enter 6-digit code (prototype: 123456)</p>
+      <p>Enter the 6-digit code sent to your email</p>
       <div class="verification-inputs">
         <input type="text" maxlength="1" pattern="\d" required autofocus/>
         <input type="text" maxlength="1" pattern="\d" required/>
@@ -54,6 +54,7 @@
 
   <script>
     const USERS_KEY = 'elxora_users';
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxKdjN5rmMG_Diaw-AbLeG1G5Jn38BFc4o5y95MHNDGaJnAroY9PrHFMCjw2VaJ5bkp/exec';
 
     function getUsers() {
       return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
@@ -75,7 +76,7 @@
       document.querySelector('.verification-inputs input').focus();
     }
 
-    // Auto-focus next input for verification code
+    // Auto-focus next input
     const verifyInputs = document.querySelectorAll('.verification-inputs input');
     verifyInputs.forEach((input, index) => {
       input.addEventListener('input', () => {
@@ -85,8 +86,8 @@
       });
     });
 
-    // Sign Up button
-    document.getElementById('signup-btn').addEventListener('click', () => {
+    // SIGN UP button – generate OTP and send real email
+    document.getElementById('signup-btn').addEventListener('click', async () => {
       const email    = document.getElementById('signup-email').value.trim();
       const username = document.getElementById('signup-username').value.trim();
       const pass     = document.getElementById('signup-password').value;
@@ -124,31 +125,69 @@
 
       if (hasError) return;
 
-      // Store temp data and go to verification
-      localStorage.setItem('temp_signup', JSON.stringify({ email, username, pass }));
-      showVerify();
+      // Generate real 6-digit code
+      const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+      try {
+        await fetch(SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',  // Important for Google Apps Script
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email,
+            username: username,
+            code: generatedCode
+          })
+        });
+
+        // Store temp data for verification
+        localStorage.setItem('temp_signup', JSON.stringify({
+          email,
+          username,
+          pass,
+          code: generatedCode,
+          timestamp: Date.now()
+        }));
+
+        showVerify();
+        alert(`A 6-digit code has been sent to ${email}\nCheck your inbox/spam folder (may take up to 60 seconds)`);
+
+      } catch (err) {
+        console.error('Failed to send OTP:', err);
+        alert('Error sending code. Check console (F12) and try again.');
+      }
     });
 
-    // Verify button (fake code 123456)
+    // VERIFY button
     document.getElementById('verify-btn').addEventListener('click', () => {
-      const code = Array.from(verifyInputs).map(i => i.value.trim()).join('');
-      if (code !== '123456') {
-        document.getElementById('verify-error').textContent = 'Wrong code — use 123456 for now';
-        return;
-      }
-
+      const enteredCode = Array.from(verifyInputs).map(i => i.value.trim()).join('');
       const temp = JSON.parse(localStorage.getItem('temp_signup') || '{}');
-      if (!temp.email) {
+
+      if (!temp.email || !temp.code) {
         alert('Session expired — please sign up again');
         showSignup();
         return;
       }
 
+      // Check expiry (10 minutes)
+      if (Date.now() - temp.timestamp > 10 * 60 * 1000) {
+        alert('Code expired. Please sign up again.');
+        localStorage.removeItem('temp_signup');
+        showSignup();
+        return;
+      }
+
+      if (enteredCode !== temp.code) {
+        document.getElementById('verify-error').textContent = 'Incorrect code';
+        return;
+      }
+
+      // Success – create account
       const users = getUsers();
       users.push({
         email: temp.email,
         username: temp.username,
-        pass: temp.pass  // plaintext – only for prototype!
+        pass: temp.pass  // plaintext for now – only prototype!
       });
       saveUsers(users);
 
@@ -159,6 +198,7 @@
 
       localStorage.removeItem('temp_signup');
 
+      alert('Email verified! Welcome to ElXora 🎉');
       window.location.href = 'index.html';
     });
 
@@ -172,4 +212,4 @@
     showSignup();
   </script>
 </body>
-</html>
+  </html>

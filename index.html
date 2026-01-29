@@ -5,36 +5,56 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ElXora</title>
   <link rel="stylesheet" href="style.css"/>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" integrity="sha512-...somehash..." crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css"/>
 </head>
 <body>
 
-  <!-- Auth Screen -->
+  <!-- Auth -->
   <div id="auth-container" class="auth-container">
     <div id="login-form" class="auth-form">
       <h1>ElXora</h1>
       <h2>Log In</h2>
-      <input type="email" id="login-email" placeholder="Email" required autocomplete="email"/>
-      <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password"/>
+      <div class="input-group">
+        <input type="email" id="login-email" placeholder="Email" required autocomplete="email"/>
+        <div id="login-email-error" class="error-text"></div>
+      </div>
+      <div class="input-group">
+        <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password"/>
+        <div id="login-password-error" class="error-text"></div>
+      </div>
       <button id="login-btn">Log In</button>
+      <div id="login-general-error" class="error-text center"></div>
       <p>Don't have an account? <a href="#" id="signup-link">Sign up</a></p>
     </div>
 
     <div id="signup-form" class="auth-form hidden">
       <h1>ElXora</h1>
-      <h2>Sign Up</h2>
-      <input type="email" id="signup-email" placeholder="Email" required/>
-      <input type="text" id="signup-username" placeholder="Username (3-20 chars, a-z0-9_)" pattern="^[a-zA-Z0-9_]{3,20}$" required/>
-      <input type="password" id="signup-password" placeholder="Password" required/>
-      <input type="password" id="signup-confirm-password" placeholder="Confirm Password" required/>
+      <h2>Create Account</h2>
+      <div class="input-group">
+        <input type="email" id="signup-email" placeholder="Email" required/>
+        <div id="signup-email-error" class="error-text"></div>
+      </div>
+      <div class="input-group">
+        <input type="text" id="signup-username" placeholder="Username (3-20 chars)" required/>
+        <div id="signup-username-error" class="error-text"></div>
+      </div>
+      <div class="input-group">
+        <input type="password" id="signup-password" placeholder="Password" required/>
+        <div id="signup-password-error" class="error-text"></div>
+      </div>
+      <div class="input-group">
+        <input type="password" id="signup-confirm-password" placeholder="Confirm Password" required/>
+        <div id="signup-confirm-error" class="error-text"></div>
+      </div>
       <button id="signup-btn">Sign Up</button>
+      <div id="signup-general-error" class="error-text center"></div>
       <p>Already have an account? <a href="#" id="login-link">Log in</a></p>
     </div>
 
     <div id="verification-form" class="auth-form hidden">
       <h1>ElXora</h1>
-      <h2>Verify Your Email</h2>
-      <p>Enter the 6-digit code</p>
+      <h2>Verify Email</h2>
+      <p>Enter 6-digit code (prototype: 123456)</p>
       <div class="verification-inputs">
         <input type="text" maxlength="1" pattern="\d" required autofocus/>
         <input type="text" maxlength="1" pattern="\d" required/>
@@ -44,7 +64,7 @@
         <input type="text" maxlength="1" pattern="\d" required/>
       </div>
       <button id="verify-btn">Verify</button>
-      <div id="verification-loading" class="loading-spinner hidden"></div>
+      <div id="verify-error" class="error-text center"></div>
     </div>
   </div>
 
@@ -60,7 +80,7 @@
           <small id="email-display"></small>
         </div>
       </div>
-      <button id="sidebar-toggle" class="sidebar-toggle" title="Toggle sidebar">←</button>
+      <button id="sidebar-toggle" class="sidebar-toggle">←</button>
     </aside>
 
     <main id="main-chat" class="main-chat">
@@ -68,13 +88,12 @@
         <button id="mobile-sidebar-toggle" class="mobile-sidebar-toggle">☰</button>
         <div class="chat-header-title">
           <h2 id="chat-title">New Chat</h2>
-          <small class="subtitle">Powered by Google Gemini • Talk to ElXora</small>
+          <small class="subtitle">Powered by Gemini • ElXora</small>
         </div>
-        <button id="settings-btn" class="settings-btn" title="Settings">⚙</button>
+        <button id="settings-btn" class="settings-btn">⚙</button>
       </header>
 
       <div id="chat-messages" class="chat-messages"></div>
-
       <div id="typing-indicator" class="typing-indicator hidden">
         <div class="dot"></div><div class="dot"></div><div class="dot"></div>
       </div>
@@ -83,14 +102,14 @@
         <div class="input-wrapper">
           <button id="attach-btn" class="attach-btn" title="Attach file">📎</button>
           <textarea id="message-input" rows="1" placeholder="Message ElXora..." aria-label="Type your message"></textarea>
-          <button id="send-btn" class="send-btn" title="Send message" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <button id="send-btn" class="send-btn" title="Send" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="19" x2="12" y2="5"></line>
               <polyline points="5 12 12 5 19 12"></polyline>
             </svg>
           </button>
         </div>
-        <input type="file" id="file-input" hidden accept="image/*,.pdf,.txt,.doc,.docx,.zip"/>
+        <input type="file" id="file-input" hidden/>
       </div>
     </main>
   </div>
@@ -98,41 +117,17 @@
   <!-- Settings Modal -->
   <div id="settings-modal" class="modal hidden">
     <div class="modal-content">
-      <h2>Settings – ElXora</h2>
-      <label>Google Gemini API Key</label>
-      <input type="text" id="api-key" placeholder="Enter your Gemini API key"/>
+      <h2>Settings</h2>
+      <label>Gemini API Key</label>
+      <input type="text" id="api-key" placeholder="AIzaSy..."/>
       <button id="save-api-key">Save</button>
       <button id="close-settings">Close</button>
-    </div>
-  </div>
-
-  <!-- Confirm Modal -->
-  <div id="confirm-modal" class="modal hidden">
-    <div class="modal-content small">
-      <p id="confirm-message">Are you sure?</p>
-      <div class="modal-buttons">
-        <button id="confirm-yes">Yes</button>
-        <button id="confirm-no">No</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Rename Modal -->
-  <div id="rename-modal" class="modal hidden">
-    <div class="modal-content">
-      <h2>Rename Chat</h2>
-      <input type="text" id="rename-input" placeholder="New title"/>
-      <div class="modal-buttons">
-        <button id="rename-save">Save</button>
-        <button id="rename-cancel">Cancel</button>
-      </div>
     </div>
   </div>
 
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
-  <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
@@ -140,7 +135,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-lua.min.js"></script>
   <script src="script.js"></script>
 </body>
-</html>
+  </html>

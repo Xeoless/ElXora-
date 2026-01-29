@@ -1,8 +1,9 @@
-// script.js ──────────────────────────────────────────────── ElXora Chat App (fixed API key handling)
+// script.js ──────────────────────────────────────────────── ElXora Chat App (fixed auth + multi-user)
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL   = "gemini-1.5-flash";  // change to gemini-1.5-pro if you want / have access
-const API_KEY_NAME   = "AIzaSyBDnsH0DDfrulYKruh1YOkY1cy-Liogt6o"; // consistent storage key
+const GEMINI_MODEL    = "gemini-1.5-flash";  // can be changed in settings later
+const API_KEY_NAME    = "AIzaSyBDnsH0DDfrulYKruh1YOkY1cy-Liogt6o";
+const USERS_KEY       = "elxora_users";
 
 const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
 You love using emojis 😄🚀 to make answers more engaging and fun when it feels natural.
@@ -87,20 +88,58 @@ function renderMessage(sender, content) {
   }
 }
 
-// ─── Auth Logic ─────────────────────────────────────────────
-function getUser() {
-  return JSON.parse(localStorage.getItem('elxora_user'));
+// ─── Auth Storage Helpers ───────────────────────────────────
+function getUsers() {
+  return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
 }
 
-function setUser(user) {
-  localStorage.setItem('elxora_user', JSON.stringify(user));
+function saveUsers(users) {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+function getCurrentUser() {
+  return JSON.parse(localStorage.getItem('elxora_current_user') || 'null');
+}
+
+function setCurrentUser(user) {
+  localStorage.setItem('elxora_current_user', JSON.stringify(user));
   currentUser = user;
+  document.getElementById('username-display').textContent = user.username;
+  document.getElementById('email-display').textContent   = user.email;
+  document.getElementById('avatar').textContent          = user.username.charAt(0).toUpperCase();
 }
 
-function showLogin()  { loginForm.classList.remove('hidden');  signupForm.classList.add('hidden'); verifyForm.classList.add('hidden'); }
-function showSignup() { signupForm.classList.remove('hidden'); loginForm.classList.add('hidden');  verifyForm.classList.add('hidden'); }
-function showVerify() { verifyForm.classList.remove('hidden'); loginForm.classList.add('hidden');  signupForm.classList.add('hidden'); }
+function clearCurrentUser() {
+  localStorage.removeItem('elxora_current_user');
+  currentUser = null;
+}
 
+// ─── Auth UI Helpers ────────────────────────────────────────
+function showLogin()  { 
+  loginForm.classList.remove('hidden');  
+  signupForm.classList.add('hidden'); 
+  verifyForm.classList.add('hidden'); 
+}
+function showSignup() { 
+  signupForm.classList.remove('hidden'); 
+  loginForm.classList.add('hidden');  
+  verifyForm.classList.add('hidden'); 
+}
+function showVerify() { 
+  verifyForm.classList.remove('hidden'); 
+  loginForm.classList.add('hidden');  
+  signupForm.classList.add('hidden'); 
+}
+
+function enterApp() {
+  authContainer.classList.add('hidden');
+  appContainer.classList.remove('hidden');
+  chatMessages.innerHTML = '';
+  renderMessage('ai', WELCOME_MESSAGE);
+  messageInput.focus();
+}
+
+// ─── SIGN UP ────────────────────────────────────────────────
 document.getElementById('signup-btn').addEventListener('click', () => {
   const email    = document.getElementById('signup-email').value.trim();
   const username = document.getElementById('signup-username').value.trim();
@@ -111,14 +150,30 @@ document.getElementById('signup-btn').addEventListener('click', () => {
   document.querySelectorAll('.error-text').forEach(el => el.textContent = '');
   document.querySelectorAll('input').forEach(inp => inp.classList.remove('error'));
 
-  if (!email.includes('@'))               { document.getElementById('signup-email-error').textContent = 'Invalid email'; error = true; }
-  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) { document.getElementById('signup-username-error').textContent = '3-20 chars: a-z0-9_'; error = true; }
-  if (pass.length < 6)                    { document.getElementById('signup-password-error').textContent = '≥ 6 characters'; error = true; }
-  if (pass !== confirm)                   { document.getElementById('signup-confirm-error').textContent = 'Passwords do not match'; error = true; }
+  if (!email.includes('@') || !email.includes('.')) { 
+    document.getElementById('signup-email-error').textContent = 'Valid email required'; 
+    error = true; 
+  }
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) { 
+    document.getElementById('signup-username-error').textContent = '3-20 chars: letters, numbers, _'; 
+    error = true; 
+  }
+  if (pass.length < 6) { 
+    document.getElementById('signup-password-error').textContent = '≥ 6 characters'; 
+    error = true; 
+  }
+  if (pass !== confirm) { 
+    document.getElementById('signup-confirm-error').textContent = 'Passwords do not match'; 
+    error = true; 
+  }
 
-  const existing = getUser();
-  if (existing && existing.email === email) {
+  const users = getUsers();
+  if (users.some(u => u.email === email)) {
     document.getElementById('signup-general-error').textContent = 'Email already registered';
+    error = true;
+  }
+  if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+    document.getElementById('signup-general-error').textContent = 'Username taken';
     error = true;
   }
 
@@ -126,55 +181,80 @@ document.getElementById('signup-btn').addEventListener('click', () => {
 
   localStorage.setItem('temp_signup', JSON.stringify({email, username, pass}));
   showVerify();
-  showToast('Use verification code: 123456', 'info');
+  showToast('Enter code: 123456 (prototype mode)', 'info');
 });
 
+// ─── VERIFY ─────────────────────────────────────────────────
 document.getElementById('verify-btn').addEventListener('click', () => {
-  const code = [...verifyForm.querySelectorAll('input')].map(i => i.value.trim()).join('');
+  const code = [...document.querySelectorAll('.verification-inputs input')].map(i => i.value.trim()).join('');
   if (code !== '123456') {
-    document.getElementById('verify-error').textContent = 'Incorrect code';
+    document.getElementById('verify-error').textContent = 'Wrong code — try 123456';
     return;
   }
 
   const temp = JSON.parse(localStorage.getItem('temp_signup') || '{}');
   if (!temp.email) {
-    showToast('Session expired — please sign up again', 'error');
+    showToast('Session expired — sign up again', 'error');
     showSignup();
     return;
   }
 
-  setUser({ email: temp.email, username: temp.username, pass: temp.pass });
+  const users = getUsers();
+  users.push({ 
+    email: temp.email, 
+    username: temp.username, 
+    pass: temp.pass   // plaintext – only for local prototype!
+  });
+  saveUsers(users);
+
+  setCurrentUser({ email: temp.email, username: temp.username });
   localStorage.removeItem('temp_signup');
-  showToast('Account created successfully! 🎉', 'success');
+
+  showToast(`Account created! Welcome ${temp.username} 🎉`, 'success');
   enterApp();
 });
 
+// ─── LOGIN ──────────────────────────────────────────────────
 document.getElementById('login-btn').addEventListener('click', () => {
   const email = document.getElementById('login-email').value.trim();
   const pass  = document.getElementById('login-password').value;
-  const user  = getUser();
 
   document.querySelectorAll('.error-text').forEach(el => el.textContent = '');
 
+  const users = getUsers();
+  const user = users.find(u => u.email === email && u.pass === pass);
+
   if (!user) {
-    document.getElementById('login-general-error').textContent = 'No account found — please sign up first';
-    return;
-  }
-  if (user.email !== email) {
-    document.getElementById('login-email-error').textContent = 'Account not found';
-    return;
-  }
-  if (user.pass !== pass) {
-    document.getElementById('login-password-error').textContent = 'Invalid password';
+    document.getElementById('login-general-error').textContent = 'Wrong email or password';
     return;
   }
 
-  showToast(`Welcome back, ${user.username}! 🚀`, 'success');
+  setCurrentUser({ email: user.email, username: user.username });
+  showToast(`Welcome back ${user.username}! 🚀`, 'success');
   enterApp();
 });
 
-document.getElementById('signup-link').addEventListener('click', e => { e.preventDefault(); showSignup(); });
-document.getElementById('login-link').addEventListener('click', e => { e.preventDefault(); showLogin(); });
+// ─── Navigation Links ───────────────────────────────────────
+document.getElementById('signup-link')?.addEventListener('click', e => { 
+  e.preventDefault(); 
+  showSignup(); 
+});
+document.getElementById('login-link')?.addEventListener('click', e => { 
+  e.preventDefault(); 
+  showLogin(); 
+});
+
+// ─── LOGOUT (add <button id="logout-btn">Log Out</button> in sidebar) ───
+document.getElementById('logout-btn')?.addEventListener('click', () => {
+  if (confirm('Log out?')) {
+    clearCurrentUser();
+    chatMessages.innerHTML = '';
+    authContainer.classList.remove('hidden');
+    appContainer.classList.add('hidden');
+    showLogin();
+    showToast('Logged out successfully', 'info');
+  }
+});
 
 // ─── Gemini API Call ────────────────────────────────────────
 async function callGemini(userMessage) {
@@ -229,6 +309,8 @@ async function sendMessage() {
   typingIndicator.classList.add('hidden');
   if (reply) {
     renderMessage('ai', reply);
+  } else {
+    renderMessage('ai', "Sorry, something went wrong with the AI response 😕");
   }
 }
 
@@ -247,7 +329,7 @@ messageInput.addEventListener('keydown', e => {
 sendBtn.addEventListener('click', sendMessage);
 
 // ─── Settings Modal ─────────────────────────────────────────
-document.getElementById('settings-btn').addEventListener('click', () => {
+document.getElementById('settings-btn')?.addEventListener('click', () => {
   apiKeyInput.value = localStorage.getItem(API_KEY_NAME) || '';
   settingsModal.classList.remove('hidden');
 });
@@ -259,30 +341,15 @@ saveApiKeyBtn.addEventListener('click', () => {
     showToast('Gemini API key saved successfully!', 'success');
     settingsModal.classList.add('hidden');
   } else {
-    showToast('Please enter a valid Gemini API key', 'error');
+    showToast('Please enter a valid Gemini API key (starts with AIzaSy...)', 'error');
   }
 });
 
 closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
 
-// ─── Enter App ──────────────────────────────────────────────
-function enterApp() {
-  authContainer.classList.add('hidden');
-  appContainer.classList.remove('hidden');
-
-  const user = getUser();
-  document.getElementById('username-display').textContent = user.username;
-  document.getElementById('email-display').textContent   = user.email;
-  document.getElementById('avatar').textContent          = user.username.charAt(0).toUpperCase();
-
-  chatMessages.innerHTML = '';
-  renderMessage('ai', WELCOME_MESSAGE);
-  messageInput.focus();
-}
-
 // ─── Init ───────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  currentUser = getUser();
+  currentUser = getCurrentUser();
   if (currentUser) {
     enterApp();
   } else {
@@ -295,6 +362,15 @@ window.addEventListener('load', () => {
     input.addEventListener('input', () => {
       if (input.value.length === 1 && index < 5) {
         verifyInputs[index + 1].focus();
+      }
+    });
+    input.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const pasted = (e.clipboardData || window.clipboardData).getData('text');
+      if (/^\d{6}$/.test(pasted)) {
+        pasted.split('').forEach((char, i) => {
+          if (index + i < 6) verifyInputs[index + i].value = char;
+        });
       }
     });
   });

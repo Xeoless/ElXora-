@@ -9,67 +9,19 @@
 </head>
 <body>
 
-  <!-- Auth -->
-  <div id="auth-container" class="auth-container">
-    <div id="login-form" class="auth-form">
-      <h1>ElXora</h1>
-      <h2>Log In</h2>
-      <div class="input-group">
-        <input type="email" id="login-email" placeholder="Email" required autocomplete="email"/>
-        <div id="login-email-error" class="error-text"></div>
-      </div>
-      <div class="input-group">
-        <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password"/>
-        <div id="login-password-error" class="error-text"></div>
-      </div>
-      <button id="login-btn">Log In</button>
-      <div id="login-general-error" class="error-text center"></div>
-      <p>Don't have an account? <a href="#" id="signup-link">Sign up</a></p>
-    </div>
+  <!-- ─── PROTECTION: Redirect to login if not authenticated ─── -->
+  <script>
+    // This runs immediately — if no current user, go to login page
+    (function() {
+      const currentUser = localStorage.getItem('elxora_current_user');
+      if (!currentUser) {
+        window.location.replace('login.html');
+      }
+    })();
+  </script>
 
-    <div id="signup-form" class="auth-form hidden">
-      <h1>ElXora</h1>
-      <h2>Create Account</h2>
-      <div class="input-group">
-        <input type="email" id="signup-email" placeholder="Email" required/>
-        <div id="signup-email-error" class="error-text"></div>
-      </div>
-      <div class="input-group">
-        <input type="text" id="signup-username" placeholder="Username (3-20 chars)" required/>
-        <div id="signup-username-error" class="error-text"></div>
-      </div>
-      <div class="input-group">
-        <input type="password" id="signup-password" placeholder="Password" required/>
-        <div id="signup-password-error" class="error-text"></div>
-      </div>
-      <div class="input-group">
-        <input type="password" id="signup-confirm-password" placeholder="Confirm Password" required/>
-        <div id="signup-confirm-error" class="error-text"></div>
-      </div>
-      <button id="signup-btn">Sign Up</button>
-      <div id="signup-general-error" class="error-text center"></div>
-      <p>Already have an account? <a href="#" id="login-link">Log in</a></p>
-    </div>
-
-    <div id="verification-form" class="auth-form hidden">
-      <h1>ElXora</h1>
-      <h2>Verify Email</h2>
-      <p>Enter 6-digit code (prototype: 123456)</p>
-      <div class="verification-inputs">
-        <input type="text" maxlength="1" pattern="\d" required autofocus/>
-        <input type="text" maxlength="1" pattern="\d" required/>
-        <input type="text" maxlength="1" pattern="\d" required/>
-        <input type="text" maxlength="1" pattern="\d" required/>
-        <input type="text" maxlength="1" pattern="\d" required/>
-        <input type="text" maxlength="1" pattern="\d" required/>
-      </div>
-      <button id="verify-btn">Verify</button>
-      <div id="verify-error" class="error-text center"></div>
-    </div>
-  </div>
-
-  <!-- Main App -->
-  <div id="app-container" class="app-container hidden">
+  <!-- Main App (everything below this line stays exactly as you had it) -->
+  <div id="app-container" class="app-container">
     <aside id="sidebar" class="sidebar">
       <button id="new-chat-btn">+ New Chat</button>
       <div id="chat-list" class="chat-list"></div>
@@ -80,6 +32,10 @@
           <small id="email-display"></small>
         </div>
       </div>
+      <!-- Add logout button here -->
+      <button id="logout-btn" style="margin:16px; padding:12px; background:#e11d48; color:white; border:none; border-radius:8px; cursor:pointer;">
+        Log Out
+      </button>
       <button id="sidebar-toggle" class="sidebar-toggle">←</button>
     </aside>
 
@@ -136,5 +92,13 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
   <script src="script.js"></script>
+
+  <!-- Logout handler (add this small block or put it in script.js) -->
+  <script>
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      localStorage.removeItem('elxora_current_user');
+      window.location.href = 'login.html';
+    });
+  </script>
 </body>
-  </html>
+</html>

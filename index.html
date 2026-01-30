@@ -38,7 +38,7 @@
         <button id="mobile-sidebar-toggle" class="mobile-sidebar-toggle">☰</button>
         <div class="chat-header-title">
           <h2 id="chat-title">New Chat</h2>
-          <small class="subtitle">Best Ai • ElXora</small>
+          <small class="subtitle">Powered by Gemini • ElXora</small>
         </div>
       </header>
 
@@ -48,7 +48,7 @@
         <div class="dot"></div><div class="dot"></div><div class="dot"></div>
       </div>
 
-      <!-- Typing bar - should be visible at bottom -->
+      <!-- Typing / input bar -->
       <div class="input-area">
         <div class="input-wrapper">
           <button id="attach-btn" class="attach-btn" title="Attach file">📎</button>
@@ -78,10 +78,10 @@
 
   <script>
     // ────────────────────────────────────────────────
-    // CONFIG
+    // CONFIG - FIXED MODEL NAME
     // ────────────────────────────────────────────────
     const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-    const GEMINI_MODEL   = "gemini-1.5-flash"; // or try "gemini-1.5-flash-latest"
+    const GEMINI_MODEL   = "gemini-1.5-flash-latest";  // ← this fixes the "not found" error
     const API_KEY        = "AIzaSyBDnsH0DDfrulYKruh1YOkY1cy-Liogt6o";
 
     const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
@@ -90,18 +90,17 @@ Always write clean, modern, well-commented code.
 Wrap code in triple backticks with language tag.
 Use best practices, modern syntax.`;
 
-    // ─── DOM ────────────────────────────────────────────────
-    const chatMessages    = document.getElementById('chat-messages');
-    const messageInput    = document.getElementById('message-input');
-    const sendBtn         = document.getElementById('send-btn');
-    const typingIndicator = document.getElementById('typing-indicator');
-    const chatTitle       = document.getElementById('chat-title');
-    const toastEl         = document.getElementById('toast');
+    // ─── DOM Elements ────────────────────────────────────
+    const chatMessages       = document.getElementById('chat-messages');
+    const messageInput       = document.getElementById('message-input');
+    const sendBtn            = document.getElementById('send-btn');
+    const typingIndicator    = document.getElementById('typing-indicator');
+    const chatTitle          = document.getElementById('chat-title');
+    const toastEl            = document.getElementById('toast');
 
-    // Simple chat state
     let currentChat = [];
 
-    // ─── Helpers ────────────────────────────────────────────
+    // ─── Helpers ─────────────────────────────────────────
     function showToast(msg, type = 'info') {
       toastEl.textContent = msg;
       toastEl.className = `toast ${type}`;
@@ -137,7 +136,7 @@ Use best practices, modern syntax.`;
       }
     }
 
-    // ─── Gemini API ─────────────────────────────────────────
+    // ─── Gemini Call ─────────────────────────────────────
     async function callGemini(userMessage) {
       try {
         const response = await fetch(
@@ -162,12 +161,12 @@ Use best practices, modern syntax.`;
         return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response';
       } catch (err) {
         console.error("Gemini error:", err);
-        showToast('Failed to get response: ' + err.message, 'error');
+        showToast('Failed: ' + err.message, 'error');
         return null;
       }
     }
 
-    // ─── Send Message ───────────────────────────────────────
+    // ─── Send Message ────────────────────────────────────
     async function sendMessage() {
       const text = messageInput.value.trim();
       if (!text) return;
@@ -208,21 +207,21 @@ Use best practices, modern syntax.`;
 
     sendBtn.addEventListener('click', sendMessage);
 
-    // ─── New Chat ───────────────────────────────────────────
+    // ─── New Chat ────────────────────────────────────────
     document.getElementById('new-chat-btn')?.addEventListener('click', () => {
       currentChat = [];
       chatMessages.innerHTML = '';
       chatTitle.textContent = 'New Chat';
-      renderMessage('ai', "New chat started. What would you like to talk about? 🚀");
+      renderMessage('ai', "New chat started. Ask me anything 🚀");
     });
 
-    // ─── Logout ─────────────────────────────────────────────
+    // ─── Logout ──────────────────────────────────────────
     document.getElementById('logout-btn')?.addEventListener('click', () => {
       localStorage.removeItem('elxora_current_user');
       window.location.href = 'login.html';
     });
 
-    // ─── Init ───────────────────────────────────────────────
+    // ─── Init ────────────────────────────────────────────
     window.addEventListener('load', () => {
       const user = JSON.parse(localStorage.getItem('elxora_current_user') || '{}');
       document.getElementById('username-display').textContent = user.username || 'User';

@@ -11,26 +11,25 @@
 
   <!-- Redirect if not logged in -->
   <script>
-    (function() {
-      if (!localStorage.getItem('elxora_current_user')) {
-        window.location.replace('login.html');
-      }
-    })();
+    if (!localStorage.getItem('elxora_current_user')) {
+      window.location.replace('login.html');
+    }
   </script>
 
   <div id="app-container" class="app-container">
     <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <button id="sidebar-close-btn" class="close-sidebar">×</button>
+      </div>
       <button id="new-chat-btn">+ New Chat</button>
       <div id="chat-list" class="chat-list"></div>
-      <div id="user-info" class="user-info">
+      <div id="user-info" class="user-info clickable">
         <div class="avatar" id="avatar"></div>
         <div class="user-details">
           <strong id="username-display"></strong>
           <small id="email-display"></small>
         </div>
       </div>
-      <button id="logout-btn" class="logout-btn">Log Out</button>
-      <button id="sidebar-toggle" class="sidebar-toggle">←</button>
     </aside>
 
     <main id="main-chat" class="main-chat">
@@ -64,6 +63,19 @@
     </main>
   </div>
 
+  <!-- Logout Modal -->
+  <div id="logout-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Log Out?</h2>
+      <p>Are you sure you want to log out?</p>
+      <div class="modal-buttons">
+        <button id="confirm-logout">Yes, Log Out</button>
+        <button id="cancel-logout">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -75,12 +87,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
 
   <script>
-    // ────────────────────────────────────────────────
-    // CONFIG - FIXED MODEL + BETTER ERROR HANDLING
-    // ────────────────────────────────────────────────
     const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-    const GEMINI_MODEL   = "gemini-1.5-flash-latest"; // This fixes the "not found" error
-    const API_KEY        = "AIzaSyCc-EMppeqnyd6KajKGkY7wi4BxPZ06MXs";
+    const GEMINI_MODEL = "gemini-2.0-flash"; // Updated to 2.0 Flash
+    const API_KEY = "AIzaSyCc-EMppeqnyd6KajKGkY7wi4BxPZ06MXs";
 
     const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
 You love using emojis 😄🚀 to make answers more engaging.
@@ -88,22 +97,58 @@ Always write clean, modern, well-commented code.
 Wrap code in triple backticks with language tag.
 Use best practices, modern syntax.`;
 
-    // ─── DOM ────────────────────────────────────────────────
-    const chatMessages       = document.getElementById('chat-messages');
-    const messageInput       = document.getElementById('message-input');
-    const sendBtn            = document.getElementById('send-btn');
-    const typingIndicator    = document.getElementById('typing-indicator');
-    const chatTitle          = document.getElementById('chat-title');
-    const toastEl            = document.getElementById('toast');
+    // DOM elements
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('mobile-sidebar-toggle');
+    const closeBtn = document.getElementById('sidebar-close-btn');
+    const userInfo = document.getElementById('user-info');
+    const logoutModal = document.getElementById('logout-modal');
+    const confirmLogout = document.getElementById('confirm-logout');
+    const cancelLogout = document.getElementById('cancel-logout');
+    const chatMessages = document.getElementById('chat-messages');
+    const messageInput = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-btn');
+    const typingIndicator = document.getElementById('typing-indicator');
+    const chatTitle = document.getElementById('chat-title');
+    const toastEl = document.getElementById('toast');
 
     let currentChat = [];
 
-    // ─── Helpers ────────────────────────────────────────────
+    // Sidebar toggle
+    function toggleSidebar() {
+      sidebar.classList.toggle('open');
+    }
+
+    toggleBtn.addEventListener('click', toggleSidebar);
+    closeBtn.addEventListener('click', toggleSidebar);
+
+    // Click outside to close sidebar
+    document.addEventListener('click', e => {
+      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && !toggleBtn.contains(e.target)) {
+        sidebar.classList.remove('open');
+      }
+    });
+
+    // Logout modal
+    userInfo.addEventListener('click', () => {
+      logoutModal.classList.remove('hidden');
+    });
+
+    cancelLogout.addEventListener('click', () => {
+      logoutModal.classList.add('hidden');
+    });
+
+    confirmLogout.addEventListener('click', () => {
+      localStorage.removeItem('elxora_current_user');
+      window.location.href = 'login.html';
+    });
+
+    // ─── Utilities ──────────────────────────────────────────────
     function showToast(msg, type = 'info') {
       toastEl.textContent = msg;
       toastEl.className = `toast ${type}`;
       toastEl.classList.remove('hidden');
-      setTimeout(() => toastEl.classList.add('hidden'), 5000);
+      setTimeout(() => toastEl.classList.add('hidden'), 4000);
     }
 
     function scrollToBottom() {
@@ -134,7 +179,7 @@ Use best practices, modern syntax.`;
       }
     }
 
-    // ─── Gemini API ─────────────────────────────────────────
+    // ─── Gemini API ─────────────────────────────────────────────
     async function callGemini(userMessage) {
       try {
         const response = await fetch(
@@ -151,24 +196,20 @@ Use best practices, modern syntax.`;
         );
 
         if (!response.ok) {
-          let errMsg = `HTTP ${response.status}`;
-          try {
-            const errData = await response.json();
-            errMsg = errData.error?.message || errMsg;
-          } catch {}
-          throw new Error(errMsg);
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error?.message || `HTTP ${response.status}`);
         }
 
         const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response received';
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response';
       } catch (err) {
-        console.error("Gemini full error:", err);
+        console.error("Gemini error:", err);
         showToast('Chat failed: ' + err.message, 'error');
         return null;
       }
     }
 
-    // ─── Send Message ───────────────────────────────────────
+    // ─── Send Message ───────────────────────────────────────────
     async function sendMessage() {
       const text = messageInput.value.trim();
       if (!text) return;
@@ -209,7 +250,7 @@ Use best practices, modern syntax.`;
 
     sendBtn.addEventListener('click', sendMessage);
 
-    // ─── New Chat ───────────────────────────────────────────
+    // ─── New Chat ───────────────────────────────────────────────
     document.getElementById('new-chat-btn')?.addEventListener('click', () => {
       currentChat = [];
       chatMessages.innerHTML = '';
@@ -217,13 +258,7 @@ Use best practices, modern syntax.`;
       renderMessage('ai', "New chat started. Ask me anything 🚀");
     });
 
-    // ─── Logout ─────────────────────────────────────────────
-    document.getElementById('logout-btn')?.addEventListener('click', () => {
-      localStorage.removeItem('elxora_current_user');
-      window.location.href = 'login.html';
-    });
-
-    // ─── Init ───────────────────────────────────────────────
+    // ─── Init ───────────────────────────────────────────────────
     window.addEventListener('load', () => {
       const user = JSON.parse(localStorage.getItem('elxora_current_user') || '{}');
       document.getElementById('username-display').textContent = user.username || 'User';
@@ -236,4 +271,4 @@ Use best practices, modern syntax.`;
     });
   </script>
 </body>
-  </html>
+                                                                                                                 </html>

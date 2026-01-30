@@ -7,9 +7,8 @@
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-
   <div class="auth-container">
-    <div id="login-form" class="auth-form">
+    <div class="auth-form">
       <h1>ElXora</h1>
       <h2>Log In</h2>
       <div class="input-group">
@@ -27,25 +26,35 @@
   </div>
 
   <script>
-    // Simple login logic (you can move to auth.js later)
+    console.log("login.html script loaded");
+
     const USERS_KEY = 'elxora_users';
-    function getUsers() { return JSON.parse(localStorage.getItem(USERS_KEY) || '[]'); }
+
+    function getUsers() {
+      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+    }
 
     document.getElementById('login-btn').addEventListener('click', () => {
-      const email = document.getElementById('login-email').value.trim();
-      const pass  = document.getElementById('login-password').value;
+      console.log("Login button clicked");
 
-      document.querySelectorAll('.error-text').forEach(el => el.textContent = '');
+      const email = document.getElementById('login-email').value.trim();
+      const pass = document.getElementById('login-password').value;
 
       const users = getUsers();
       const user = users.find(u => u.email === email && u.pass === pass);
 
       if (!user) {
         document.getElementById('login-general-error').textContent = 'Wrong email or password';
+        console.log("Login failed - no matching user");
         return;
       }
 
-      localStorage.setItem('elxora_current_user', JSON.stringify({ email: user.email, username: user.username }));
+      localStorage.setItem('elxora_current_user', JSON.stringify({
+        email: user.email,
+        username: user.username
+      }));
+
+      console.log("Login success - redirecting");
       window.location.href = 'index.html';
     });
   </script>

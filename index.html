@@ -37,7 +37,7 @@
         <button id="mobile-sidebar-toggle" class="mobile-sidebar-toggle">☰</button>
         <div class="chat-header-title">
           <h2 id="chat-title">New Chat</h2>
-          <small class="subtitle">Best Ai • ElXora</small>
+          <small class="subtitle">Powered by Gemini • ElXora</small>
         </div>
       </header>
 
@@ -87,188 +87,233 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
 
   <script>
-    const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-    const GEMINI_MODEL = "gemini-2.0-flash"; // Updated to 2.0 Flash
-    const API_KEY = "AIzaSyCc-EMppeqnyd6KajKGkY7wi4BxPZ06MXs";
+    // ────────────────────────────────────────────────
+    // Load API key from .env.local (local dev only)
+    // ────────────────────────────────────────────────
+    let API_KEY = null;
 
-    const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
+    async function loadApiKey() {
+      try {
+        const response = await fetch('.env.local');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const text = await response.text();
+        const lines = text.split('\n');
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith('#')) {
+            const [key, value] = trimmed.split('=');
+            if (key.trim() === 'GEMINI_API_KEY') {
+              API_KEY = value.trim();
+              console.log("API key loaded from .env.local");
+              break;
+            }
+          }
+        }
+
+        if (!API_KEY) throw new Error("GEMINI_API_KEY not found");
+      } catch (err) {
+        console.error("Failed to load .env.local:", err);
+        showToast("Error loading API key – check .env.local file", 'error');
+      }
+    }
+
+    // ────────────────────────────────────────────────
+    // Run everything after key is loaded
+    // ────────────────────────────────────────────────
+    (async () => {
+      await loadApiKey();
+
+      if (!API_KEY) {
+        showToast("No API key available – check .env.local", 'error');
+        return;
+      }
+
+      // ─── CONFIG ────────────────────────────────────────────────
+      const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+      const GEMINI_MODEL    = "gemini-2.0-flash";
+      const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
 You love using emojis 😄🚀 to make answers more engaging.
 Always write clean, modern, well-commented code.
 Wrap code in triple backticks with language tag.
 Use best practices, modern syntax.`;
 
-    // DOM elements
-    const sidebar = document.getElementById('sidebar');
-    const toggleBtn = document.getElementById('mobile-sidebar-toggle');
-    const closeBtn = document.getElementById('sidebar-close-btn');
-    const userInfo = document.getElementById('user-info');
-    const logoutModal = document.getElementById('logout-modal');
-    const confirmLogout = document.getElementById('confirm-logout');
-    const cancelLogout = document.getElementById('cancel-logout');
-    const chatMessages = document.getElementById('chat-messages');
-    const messageInput = document.getElementById('message-input');
-    const sendBtn = document.getElementById('send-btn');
-    const typingIndicator = document.getElementById('typing-indicator');
-    const chatTitle = document.getElementById('chat-title');
-    const toastEl = document.getElementById('toast');
+      // ─── DOM Elements ───────────────────────────────────────────
+      const chatMessages       = document.getElementById('chat-messages');
+      const messageInput       = document.getElementById('message-input');
+      const sendBtn            = document.getElementById('send-btn');
+      const typingIndicator    = document.getElementById('typing-indicator');
+      const chatTitle          = document.getElementById('chat-title');
+      const toastEl            = document.getElementById('toast');
+      const sidebar            = document.getElementById('sidebar');
+      const toggleBtn          = document.getElementById('mobile-sidebar-toggle');
+      const closeBtn           = document.getElementById('sidebar-close-btn');
+      const userInfo           = document.getElementById('user-info');
+      const logoutModal        = document.getElementById('logout-modal');
+      const confirmLogout      = document.getElementById('confirm-logout');
+      const cancelLogout       = document.getElementById('cancel-logout');
 
-    let currentChat = [];
+      let currentChat = [];
 
-    // Sidebar toggle
-    function toggleSidebar() {
-      sidebar.classList.toggle('open');
-    }
-
-    toggleBtn.addEventListener('click', toggleSidebar);
-    closeBtn.addEventListener('click', toggleSidebar);
-
-    // Click outside to close sidebar
-    document.addEventListener('click', e => {
-      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && !toggleBtn.contains(e.target)) {
-        sidebar.classList.remove('open');
+      // ─── Sidebar Toggle ────────────────────────────────────────
+      function toggleSidebar() {
+        sidebar.classList.toggle('open');
       }
-    });
 
-    // Logout modal
-    userInfo.addEventListener('click', () => {
-      logoutModal.classList.remove('hidden');
-    });
+      toggleBtn.addEventListener('click', toggleSidebar);
+      closeBtn.addEventListener('click', toggleSidebar);
 
-    cancelLogout.addEventListener('click', () => {
-      logoutModal.classList.add('hidden');
-    });
+      // Close sidebar when clicking outside
+      document.addEventListener('click', e => {
+        if (sidebar.classList.contains('open') &&
+            !sidebar.contains(e.target) &&
+            !toggleBtn.contains(e.target)) {
+          sidebar.classList.remove('open');
+        }
+      });
 
-    confirmLogout.addEventListener('click', () => {
-      localStorage.removeItem('elxora_current_user');
-      window.location.href = 'login.html';
-    });
+      // ─── Logout Modal ──────────────────────────────────────────
+      userInfo.addEventListener('click', () => {
+        logoutModal.classList.remove('hidden');
+      });
 
-    // ─── Utilities ──────────────────────────────────────────────
-    function showToast(msg, type = 'info') {
-      toastEl.textContent = msg;
-      toastEl.className = `toast ${type}`;
-      toastEl.classList.remove('hidden');
-      setTimeout(() => toastEl.classList.add('hidden'), 4000);
-    }
+      cancelLogout.addEventListener('click', () => {
+        logoutModal.classList.add('hidden');
+      });
 
-    function scrollToBottom() {
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
+      confirmLogout.addEventListener('click', () => {
+        localStorage.removeItem('elxora_current_user');
+        window.location.href = 'login.html';
+      });
 
-    function autoGrow(el) {
-      el.style.height = 'auto';
-      el.style.height = el.scrollHeight + "px";
-    }
+      // ─── Utilities ─────────────────────────────────────────────
+      function showToast(msg, type = 'info') {
+        toastEl.textContent = msg;
+        toastEl.className = `toast ${type}`;
+        toastEl.classList.remove('hidden');
+        setTimeout(() => toastEl.classList.add('hidden'), 4000);
+      }
 
-    function renderMessage(sender, content) {
-      const div = document.createElement('div');
-      div.className = `message ${sender}-message`;
-      div.innerHTML = `<div class="message-content">${marked.parse(content)}</div>`;
-      chatMessages.appendChild(div);
-      scrollToBottom();
+      function scrollToBottom() {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
 
-      if (sender === 'ai') {
-        setTimeout(() => {
-          document.querySelectorAll('pre code').forEach(block => {
-            if (!block.dataset.processed) {
-              Prism.highlightElement(block);
-              block.dataset.processed = 'true';
+      function autoGrow(el) {
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + "px";
+      }
+
+      function renderMessage(sender, content) {
+        const div = document.createElement('div');
+        div.className = `message ${sender}-message`;
+        div.innerHTML = `<div class="message-content">${marked.parse(content)}</div>`;
+        chatMessages.appendChild(div);
+        scrollToBottom();
+
+        if (sender === 'ai') {
+          setTimeout(() => {
+            document.querySelectorAll('pre code').forEach(block => {
+              if (!block.dataset.processed) {
+                Prism.highlightElement(block);
+                block.dataset.processed = 'true';
+              }
+            });
+          }, 100);
+        }
+      }
+
+      // ─── Gemini API Call ───────────────────────────────────────
+      async function callGemini(userMessage) {
+        try {
+          const response = await fetch(
+            `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
+              })
             }
-          });
-        }, 100);
-      }
-    }
+          );
 
-    // ─── Gemini API ─────────────────────────────────────────────
-    async function callGemini(userMessage) {
-      try {
-        const response = await fetch(
-          `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-              systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-              generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
-            })
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error?.message || `HTTP ${response.status}`);
           }
-        );
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error?.message || `HTTP ${response.status}`);
+          const data = await response.json();
+          return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response';
+        } catch (err) {
+          console.error("Gemini error:", err);
+          showToast('Chat failed: ' + err.message, 'error');
+          return null;
+        }
+      }
+
+      // ─── Send Message ──────────────────────────────────────────
+      async function sendMessage() {
+        const text = messageInput.value.trim();
+        if (!text) return;
+
+        renderMessage('user', text);
+        currentChat.push({ role: 'user', content: text });
+
+        messageInput.value = '';
+        autoGrow(messageInput);
+        sendBtn.disabled = true;
+        typingIndicator.classList.remove('hidden');
+        scrollToBottom();
+
+        const reply = await callGemini(text);
+
+        typingIndicator.classList.add('hidden');
+        if (reply) {
+          renderMessage('ai', reply);
+          currentChat.push({ role: 'ai', content: reply });
+        } else {
+          renderMessage('ai', "Sorry, something went wrong 😕");
         }
 
-        const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response';
-      } catch (err) {
-        console.error("Gemini error:", err);
-        showToast('Chat failed: ' + err.message, 'error');
-        return null;
-      }
-    }
-
-    // ─── Send Message ───────────────────────────────────────────
-    async function sendMessage() {
-      const text = messageInput.value.trim();
-      if (!text) return;
-
-      renderMessage('user', text);
-      currentChat.push({ role: 'user', content: text });
-
-      messageInput.value = '';
-      autoGrow(messageInput);
-      sendBtn.disabled = true;
-      typingIndicator.classList.remove('hidden');
-      scrollToBottom();
-
-      const reply = await callGemini(text);
-
-      typingIndicator.classList.add('hidden');
-      if (reply) {
-        renderMessage('ai', reply);
-        currentChat.push({ role: 'ai', content: reply });
-      } else {
-        renderMessage('ai', "Sorry, something went wrong 😕");
+        sendBtn.disabled = false;
       }
 
-      sendBtn.disabled = false;
-    }
+      messageInput.addEventListener('input', () => {
+        autoGrow(messageInput);
+        sendBtn.disabled = !messageInput.value.trim();
+      });
 
-    messageInput.addEventListener('input', () => {
-      autoGrow(messageInput);
-      sendBtn.disabled = !messageInput.value.trim();
-    });
+      messageInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
 
-    messageInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
-    });
+      sendBtn.addEventListener('click', sendMessage);
 
-    sendBtn.addEventListener('click', sendMessage);
+      // ─── New Chat ──────────────────────────────────────────────
+      document.getElementById('new-chat-btn')?.addEventListener('click', () => {
+        currentChat = [];
+        chatMessages.innerHTML = '';
+        chatTitle.textContent = 'New Chat';
+        renderMessage('ai', "New chat started. Ask me anything 🚀");
+      });
 
-    // ─── New Chat ───────────────────────────────────────────────
-    document.getElementById('new-chat-btn')?.addEventListener('click', () => {
-      currentChat = [];
-      chatMessages.innerHTML = '';
-      chatTitle.textContent = 'New Chat';
-      renderMessage('ai', "New chat started. Ask me anything 🚀");
-    });
+      // ─── Init ──────────────────────────────────────────────────
+      window.addEventListener('load', () => {
+        const user = JSON.parse(localStorage.getItem('elxora_current_user') || '{}');
+        document.getElementById('username-display').textContent = user.username || 'User';
+        document.getElementById('email-display').textContent   = user.email || '';
+        document.getElementById('avatar').textContent          = (user.username || 'U').charAt(0).toUpperCase();
 
-    // ─── Init ───────────────────────────────────────────────────
-    window.addEventListener('load', () => {
-      const user = JSON.parse(localStorage.getItem('elxora_current_user') || '{}');
-      document.getElementById('username-display').textContent = user.username || 'User';
-      document.getElementById('email-display').textContent   = user.email || '';
-      document.getElementById('avatar').textContent          = (user.username || 'U').charAt(0).toUpperCase();
-
-      chatMessages.innerHTML = '';
-      renderMessage('ai', "Welcome to ElXora! Ask me anything 😄");
-      messageInput.focus();
-    });
+        chatMessages.innerHTML = '';
+        renderMessage('ai', "Welcome to ElXora! Ask me anything 😄");
+        messageInput.focus();
+      });
+    })();
   </script>
 </body>
-                                                                                                                 </html>
+        </html>

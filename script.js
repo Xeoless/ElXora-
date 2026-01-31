@@ -1,7 +1,7 @@
 // script.js ──────────────────────────────────────────────── ElXora Chat App (real OTP + no hardcoded key)
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL    = "gemini-2.0-flash"; // or gemini-2.0-flash-latest
+const GEMINI_MODEL    = "gemini-1.5-flash-latest";
 const OTP_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbxKdjN5rmMG_Diaw-AbLeG1G5Jn38BFc4o5y95MHNDGaJnAroY9PrHFMCjw2VaJ5bkp/exec";
 
 const USERS_KEY       = "elxora_users";

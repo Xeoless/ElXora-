@@ -1,8 +1,9 @@
-// script.js ──────────────────────────────────────────────── ElXora Chat App (fixed auth + multi-user)
+// script.js ──────────────────────────────────────────────── ElXora Chat App (real OTP + no hardcoded key)
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL    = "gemini-1.5-flash";  // can be changed in settings later
-const API_KEY_NAME    = "AIzaSyBDnsH0DDfrulYKruh1YOkY1cy-Liogt6o";
+const GEMINI_MODEL    = "gemini-2.0-flash"; // or gemini-2.0-flash-latest
+const OTP_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbxKdjN5rmMG_Diaw-AbLeG1G5Jn38BFc4o5y95MHNDGaJnAroY9PrHFMCjw2VaJ5bkp/exec";
+
 const USERS_KEY       = "elxora_users";
 
 const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
@@ -32,10 +33,6 @@ const
   fileInput          = document.getElementById('file-input'),
   typingIndicator    = document.getElementById('typing-indicator'),
   chatTitle          = document.getElementById('chat-title'),
-  settingsModal      = document.getElementById('settings-modal'),
-  apiKeyInput        = document.getElementById('api-key'),
-  saveApiKeyBtn      = document.getElementById('save-api-key'),
-  closeSettingsBtn   = document.getElementById('close-settings'),
   toastEl            = document.getElementById('toast');
 
 // ─── State ──────────────────────────────────────────────────
@@ -65,7 +62,6 @@ function renderMessage(sender, content) {
   chatMessages.appendChild(div);
   scrollToBottom();
 
-  // Code highlighting + copy button
   if (sender === 'ai') {
     setTimeout(() => {
       document.querySelectorAll('pre code').forEach((block) => {
@@ -140,70 +136,109 @@ function enterApp() {
 }
 
 // ─── SIGN UP ────────────────────────────────────────────────
-document.getElementById('signup-btn').addEventListener('click', () => {
+document.getElementById('signup-btn').addEventListener('click', async () => {
   const email    = document.getElementById('signup-email').value.trim();
   const username = document.getElementById('signup-username').value.trim();
   const pass     = document.getElementById('signup-password').value;
   const confirm  = document.getElementById('signup-confirm-password').value;
 
-  let error = false;
+  let hasError = false;
   document.querySelectorAll('.error-text').forEach(el => el.textContent = '');
   document.querySelectorAll('input').forEach(inp => inp.classList.remove('error'));
 
   if (!email.includes('@') || !email.includes('.')) { 
     document.getElementById('signup-email-error').textContent = 'Valid email required'; 
-    error = true; 
+    hasError = true; 
   }
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) { 
     document.getElementById('signup-username-error').textContent = '3-20 chars: letters, numbers, _'; 
-    error = true; 
+    hasError = true; 
   }
   if (pass.length < 6) { 
     document.getElementById('signup-password-error').textContent = '≥ 6 characters'; 
-    error = true; 
+    hasError = true; 
   }
   if (pass !== confirm) { 
     document.getElementById('signup-confirm-error').textContent = 'Passwords do not match'; 
-    error = true; 
+    hasError = true; 
   }
 
   const users = getUsers();
   if (users.some(u => u.email === email)) {
     document.getElementById('signup-general-error').textContent = 'Email already registered';
-    error = true;
+    hasError = true;
   }
   if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
     document.getElementById('signup-general-error').textContent = 'Username taken';
-    error = true;
+    hasError = true;
   }
 
-  if (error) return;
+  if (hasError) return;
 
-  localStorage.setItem('temp_signup', JSON.stringify({email, username, pass}));
-  showVerify();
-  showToast('Enter code: 123456 (prototype mode)', 'info');
+  // Generate real OTP
+  const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+  try {
+    console.log("Sending OTP to", email);
+    await fetch(OTP_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        username,
+        code: generatedCode
+      })
+    });
+
+    // Store temp data
+    localStorage.setItem('temp_signup', JSON.stringify({
+      email,
+      username,
+      pass,
+      code: generatedCode,
+      timestamp: Date.now()
+    }));
+
+    showVerify();
+    showToast(`Code sent to ${email}! Check inbox/spam`, 'success');
+  } catch (err) {
+    console.error("OTP send failed:", err);
+    showToast('Failed to send code – check console', 'error');
+  }
 });
 
 // ─── VERIFY ─────────────────────────────────────────────────
 document.getElementById('verify-btn').addEventListener('click', () => {
-  const code = [...document.querySelectorAll('.verification-inputs input')].map(i => i.value.trim()).join('');
-  if (code !== '123456') {
-    document.getElementById('verify-error').textContent = 'Wrong code — try 123456';
-    return;
-  }
+  const enteredCode = Array.from(document.querySelectorAll('.verification-inputs input'))
+    .map(i => i.value.trim()).join('');
 
   const temp = JSON.parse(localStorage.getItem('temp_signup') || '{}');
-  if (!temp.email) {
+
+  if (!temp.email || !temp.code) {
     showToast('Session expired — sign up again', 'error');
     showSignup();
     return;
   }
 
+  if (Date.now() - temp.timestamp > 600000) { // 10 min
+    showToast('Code expired — sign up again', 'error');
+    localStorage.removeItem('temp_signup');
+    showSignup();
+    return;
+  }
+
+  if (enteredCode !== temp.code) {
+    document.getElementById('verify-error').textContent = 'Incorrect code';
+    return;
+  }
+
+  // Success
   const users = getUsers();
   users.push({ 
     email: temp.email, 
     username: temp.username, 
-    pass: temp.pass   // plaintext – only for local prototype!
+    pass: temp.pass 
   });
   saveUsers(users);
 
@@ -244,7 +279,7 @@ document.getElementById('login-link')?.addEventListener('click', e => {
   showLogin(); 
 });
 
-// ─── LOGOUT (add <button id="logout-btn">Log Out</button> in sidebar) ───
+// ─── LOGOUT ─────────────────────────────────────────────────
 document.getElementById('logout-btn')?.addEventListener('click', () => {
   if (confirm('Log out?')) {
     clearCurrentUser();
@@ -258,15 +293,9 @@ document.getElementById('logout-btn')?.addEventListener('click', () => {
 
 // ─── Gemini API Call ────────────────────────────────────────
 async function callGemini(userMessage) {
-  const apiKey = localStorage.getItem(API_KEY_NAME);
-  if (!apiKey) {
-    showToast('Please set your Gemini API key in Settings (gear icon) ⚙', 'error');
-    return null;
-  }
-
   try {
     const response = await fetch(
-      `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+      `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -328,25 +357,6 @@ messageInput.addEventListener('keydown', e => {
 
 sendBtn.addEventListener('click', sendMessage);
 
-// ─── Settings Modal ─────────────────────────────────────────
-document.getElementById('settings-btn')?.addEventListener('click', () => {
-  apiKeyInput.value = localStorage.getItem(API_KEY_NAME) || '';
-  settingsModal.classList.remove('hidden');
-});
-
-saveApiKeyBtn.addEventListener('click', () => {
-  const key = apiKeyInput.value.trim();
-  if (key.startsWith('AIzaSy') && key.length > 30) {
-    localStorage.setItem(API_KEY_NAME, key);
-    showToast('Gemini API key saved successfully!', 'success');
-    settingsModal.classList.add('hidden');
-  } else {
-    showToast('Please enter a valid Gemini API key (starts with AIzaSy...)', 'error');
-  }
-});
-
-closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
-
 // ─── Init ───────────────────────────────────────────────────
 window.addEventListener('load', () => {
   currentUser = getCurrentUser();
@@ -356,7 +366,7 @@ window.addEventListener('load', () => {
     showLogin();
   }
 
-  // Verification code auto-focus next field
+  // Verification code auto-focus + paste support
   const verifyInputs = document.querySelectorAll('.verification-inputs input');
   verifyInputs.forEach((input, index) => {
     input.addEventListener('input', () => {

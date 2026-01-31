@@ -112,7 +112,7 @@
           }
         }
 
-        if (!API_KEY) throw new Error("GEMINI_API_KEY not found");
+        if (!API_KEY) throw new Error("GEMINI_API_KEY not found in .env.local");
       } catch (err) {
         console.error("Failed to load .env.local:", err);
         showToast("Error loading API key – check .env.local file", 'error');
@@ -132,7 +132,7 @@
 
       // ─── CONFIG ────────────────────────────────────────────────
       const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-      const GEMINI_MODEL    = "gemini-2.0-flash";
+      const GEMINI_MODEL    = "gemini-2.0-flash"; // Gemini 2.0 Flash model
       const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
 You love using emojis 😄🚀 to make answers more engaging.
 Always write clean, modern, well-commented code.
@@ -164,11 +164,8 @@ Use best practices, modern syntax.`;
       toggleBtn.addEventListener('click', toggleSidebar);
       closeBtn.addEventListener('click', toggleSidebar);
 
-      // Close sidebar when clicking outside
       document.addEventListener('click', e => {
-        if (sidebar.classList.contains('open') &&
-            !sidebar.contains(e.target) &&
-            !toggleBtn.contains(e.target)) {
+        if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && !toggleBtn.contains(e.target)) {
           sidebar.classList.remove('open');
         }
       });
@@ -192,7 +189,7 @@ Use best practices, modern syntax.`;
         toastEl.textContent = msg;
         toastEl.className = `toast ${type}`;
         toastEl.classList.remove('hidden');
-        setTimeout(() => toastEl.classList.add('hidden'), 4000);
+        setTimeout(() => toastEl.classList.add('hidden'), 5000);
       }
 
       function scrollToBottom() {
@@ -316,4 +313,4 @@ Use best practices, modern syntax.`;
     })();
   </script>
 </body>
-        </html>
+  </html>

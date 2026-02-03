@@ -1,9 +1,7 @@
-// script.js ──────────────────────────────────────────────── ElXora Chat App (real OTP + no hardcoded key)
+// script.js ──────────────────────────────────────────────── ElXora Chat App (fixed auth + saved users)
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL    = "gemini-1.5-flash-latest";
-const OTP_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbxKdjN5rmMG_Diaw-AbLeG1G5Jn38BFc4o5y95MHNDGaJnAroY9PrHFMCjw2VaJ5bkp/exec";
-
+const GEMINI_MODEL    = "gemini-2.0-flash"; // Fixed model name
 const USERS_KEY       = "elxora_users";
 
 const SYSTEM_PROMPT = `You are a highly skilled, friendly senior developer who masters Luau (Roblox), Python, JavaScript/TypeScript, HTML, CSS.
@@ -16,7 +14,7 @@ When showing code:
 - Use best practices, modern syntax, avoid deprecated features
 Feel free to use emojis in your normal text responses to make them more lively and human 😊👍`;
 
-const WELCOME_MESSAGE = `Hey Kevin 👋  
+const WELCOME_MESSAGE = `Hey There 👋  
 What can I help you with today? 🚀`;
 
 // ─── DOM Elements ───────────────────────────────────────────
@@ -25,7 +23,6 @@ const
   appContainer       = document.getElementById('app-container'),
   loginForm          = document.getElementById('login-form'),
   signupForm         = document.getElementById('signup-form'),
-  verifyForm         = document.getElementById('verification-form'),
   chatMessages       = document.getElementById('chat-messages'),
   messageInput       = document.getElementById('message-input'),
   sendBtn            = document.getElementById('send-btn'),
@@ -114,19 +111,11 @@ function clearCurrentUser() {
 function showLogin()  { 
   loginForm.classList.remove('hidden');  
   signupForm.classList.add('hidden'); 
-  verifyForm.classList.add('hidden'); 
 }
 function showSignup() { 
   signupForm.classList.remove('hidden'); 
   loginForm.classList.add('hidden');  
-  verifyForm.classList.add('hidden'); 
 }
-function showVerify() { 
-  verifyForm.classList.remove('hidden'); 
-  loginForm.classList.add('hidden');  
-  signupForm.classList.add('hidden'); 
-}
-
 function enterApp() {
   authContainer.classList.add('hidden');
   appContainer.classList.remove('hidden');
@@ -136,7 +125,7 @@ function enterApp() {
 }
 
 // ─── SIGN UP ────────────────────────────────────────────────
-document.getElementById('signup-btn').addEventListener('click', async () => {
+document.getElementById('signup-btn').addEventListener('click', () => {
   const email    = document.getElementById('signup-email').value.trim();
   const username = document.getElementById('signup-username').value.trim();
   const pass     = document.getElementById('signup-password').value;
@@ -165,7 +154,7 @@ document.getElementById('signup-btn').addEventListener('click', async () => {
 
   const users = getUsers();
   if (users.some(u => u.email === email)) {
-    document.getElementById('signup-general-error').textContent = 'Email already registered';
+    document.getElementById('signup-general-error').textContent = 'Email already registered - please log in instead';
     hasError = true;
   }
   if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
@@ -175,77 +164,17 @@ document.getElementById('signup-btn').addEventListener('click', async () => {
 
   if (hasError) return;
 
-  // Generate real OTP
-  const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-  try {
-    console.log("Sending OTP to", email);
-    await fetch(OTP_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email,
-        username,
-        code: generatedCode
-      })
-    });
-
-    // Store temp data
-    localStorage.setItem('temp_signup', JSON.stringify({
-      email,
-      username,
-      pass,
-      code: generatedCode,
-      timestamp: Date.now()
-    }));
-
-    showVerify();
-    showToast(`Code sent to ${email}! Check inbox/spam`, 'success');
-  } catch (err) {
-    console.error("OTP send failed:", err);
-    showToast('Failed to send code – check console', 'error');
-  }
-});
-
-// ─── VERIFY ─────────────────────────────────────────────────
-document.getElementById('verify-btn').addEventListener('click', () => {
-  const enteredCode = Array.from(document.querySelectorAll('.verification-inputs input'))
-    .map(i => i.value.trim()).join('');
-
-  const temp = JSON.parse(localStorage.getItem('temp_signup') || '{}');
-
-  if (!temp.email || !temp.code) {
-    showToast('Session expired — sign up again', 'error');
-    showSignup();
-    return;
-  }
-
-  if (Date.now() - temp.timestamp > 600000) { // 10 min
-    showToast('Code expired — sign up again', 'error');
-    localStorage.removeItem('temp_signup');
-    showSignup();
-    return;
-  }
-
-  if (enteredCode !== temp.code) {
-    document.getElementById('verify-error').textContent = 'Incorrect code';
-    return;
-  }
-
-  // Success
-  const users = getUsers();
+  // Save new user
   users.push({ 
-    email: temp.email, 
-    username: temp.username, 
-    pass: temp.pass 
+    email, 
+    username, 
+    pass  // plaintext – only for local prototype!
   });
   saveUsers(users);
 
-  setCurrentUser({ email: temp.email, username: temp.username });
-  localStorage.removeItem('temp_signup');
-
-  showToast(`Account created! Welcome ${temp.username} 🎉`, 'success');
+  // Auto-login after signup
+  setCurrentUser({ email, username });
+  showToast(`Account created! Welcome ${username} 🎉`, 'success');
   enterApp();
 });
 
@@ -365,23 +294,5 @@ window.addEventListener('load', () => {
   } else {
     showLogin();
   }
-
-  // Verification code auto-focus + paste support
-  const verifyInputs = document.querySelectorAll('.verification-inputs input');
-  verifyInputs.forEach((input, index) => {
-    input.addEventListener('input', () => {
-      if (input.value.length === 1 && index < 5) {
-        verifyInputs[index + 1].focus();
-      }
-    });
-    input.addEventListener('paste', (e) => {
-      e.preventDefault();
-      const pasted = (e.clipboardData || window.clipboardData).getData('text');
-      if (/^\d{6}$/.test(pasted)) {
-        pasted.split('').forEach((char, i) => {
-          if (index + i < 6) verifyInputs[index + i].value = char;
-        });
-      }
-    });
-  });
 });
+</script>
